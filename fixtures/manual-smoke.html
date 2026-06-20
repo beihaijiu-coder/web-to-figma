@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Web to Figma Manual Smoke Fixture</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #eef2ff;
+      color: #0f172a;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 1500px;
+      background:
+        radial-gradient(circle at top left, rgba(37, 99, 235, 0.22), transparent 34rem),
+        linear-gradient(180deg, #f8fafc 0%, #e0f2fe 100%);
+    }
+
+    .page {
+      width: min(1120px, calc(100vw - 48px));
+      margin: 0 auto;
+      padding: 48px 0 96px;
+      display: grid;
+      gap: 28px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 28px;
+      align-items: stretch;
+    }
+
+    .panel {
+      border: 1px solid rgba(148, 163, 184, 0.42);
+      border-radius: 28px;
+      background: rgba(255, 255, 255, 0.82);
+      box-shadow: 0 24px 80px rgba(15, 23, 42, 0.14);
+      overflow: hidden;
+    }
+
+    #pricing-card {
+      padding: 36px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .eyebrow {
+      width: max-content;
+      border-radius: 999px;
+      padding: 8px 12px;
+      background: #dbeafe;
+      color: #1d4ed8;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 560px;
+      font-size: clamp(42px, 6vw, 72px);
+      line-height: 0.95;
+      letter-spacing: -0.06em;
+    }
+
+    .copy {
+      margin: 0;
+      max-width: 530px;
+      color: #475569;
+      font-size: 18px;
+      line-height: 1.7;
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .button {
+      border: 0;
+      border-radius: 16px;
+      padding: 14px 18px;
+      background: #2563eb;
+      color: white;
+      font-weight: 800;
+      font-size: 15px;
+      box-shadow: 0 12px 32px rgba(37, 99, 235, 0.32);
+    }
+
+    .button.secondary {
+      background: #f8fafc;
+      color: #0f172a;
+      border: 1px solid #cbd5e1;
+      box-shadow: none;
+    }
+
+    #background-card {
+      min-height: 420px;
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      gap: 14px;
+      color: white;
+      background-image:
+        linear-gradient(180deg, rgba(15, 23, 42, 0.05), rgba(15, 23, 42, 0.74)),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='640' viewBox='0 0 900 640'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' x2='1' y1='0' y2='1'%3E%3Cstop stop-color='%232563eb'/%3E%3Cstop offset='1' stop-color='%2306b6d4'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='900' height='640' rx='44' fill='url(%23g)'/%3E%3Ccircle cx='680' cy='120' r='150' fill='%23ffffff' opacity='.20'/%3E%3Ccircle cx='180' cy='460' r='210' fill='%230f172a' opacity='.20'/%3E%3Cpath d='M96 420 C210 280 328 502 456 332 S736 240 812 364' fill='none' stroke='%23fff' stroke-width='24' opacity='.34' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-size: cover;
+      background-position: center;
+    }
+
+    #background-card h2 {
+      margin: 0;
+      font-size: 34px;
+      letter-spacing: -0.04em;
+    }
+
+    #background-card p {
+      margin: 0;
+      color: rgba(255, 255, 255, 0.86);
+      line-height: 1.6;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+    }
+
+    .metric {
+      padding: 22px;
+      border-radius: 22px;
+      background: #ffffff;
+      border: 1px solid #dbeafe;
+      box-shadow: 0 14px 40px rgba(30, 64, 175, 0.08);
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 34px;
+      letter-spacing: -0.04em;
+    }
+
+    .metric span {
+      color: #64748b;
+      font-size: 14px;
+    }
+
+    .visuals {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .asset-card {
+      padding: 24px;
+      display: grid;
+      gap: 16px;
+      align-content: start;
+      background: white;
+      border-radius: 24px;
+      border: 1px solid #e2e8f0;
+    }
+
+    .asset-card img {
+      width: 100%;
+      height: 180px;
+      object-fit: cover;
+      border-radius: 18px;
+    }
+
+    canvas {
+      width: 100%;
+      height: 180px;
+      border-radius: 18px;
+      background: #0f172a;
+    }
+
+    svg {
+      width: 72px;
+      height: 72px;
+    }
+
+    [contenteditable="true"] {
+      outline: 2px dashed rgba(37, 99, 235, 0.32);
+      outline-offset: 4px;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <article class="panel" id="pricing-card">
+        <div class="eyebrow">Smoke fixture</div>
+        <h1 contenteditable="true">Editable website layers, not a screenshot.</h1>
+        <p class="copy">This card should arrive in Figma as a frame with editable text, buttons, fills, borders, radius, and shadow.</p>
+        <div class="actions">
+          <button class="button">Capture this component</button>
+          <button class="button secondary">Then import clipboard</button>
+        </div>
+        <svg viewBox="0 0 72 72" aria-label="Editable sparkle icon">
+          <path d="M36 4l8.8 22.4L68 36l-23.2 9.6L36 68l-8.8-22.4L4 36l23.2-9.6L36 4z" fill="#2563eb" />
+          <circle cx="36" cy="36" r="8" fill="#bfdbfe" />
+        </svg>
+      </article>
+
+      <article class="panel" id="background-card">
+        <h2>Background image fill</h2>
+        <p>This panel checks CSS background-image import while the headline stays editable above it.</p>
+      </article>
+    </section>
+
+    <section class="grid">
+      <div class="metric"><strong>98%</strong><span>Text should stay editable</span></div>
+      <div class="metric"><strong>3×</strong><span>Images should be replaceable</span></div>
+      <div class="metric"><strong>0</strong><span>Whole-page screenshot fallback</span></div>
+    </section>
+
+    <section class="visuals">
+      <article class="asset-card">
+        <h2>Replaceable image</h2>
+        <img alt="Gradient product card" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='720' height='420' viewBox='0 0 720 420'%3E%3Cdefs%3E%3ClinearGradient id='a' x1='0' x2='1'%3E%3Cstop stop-color='%23f97316'/%3E%3Cstop offset='1' stop-color='%23ec4899'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='720' height='420' rx='34' fill='url(%23a)'/%3E%3Crect x='72' y='92' width='270' height='42' rx='21' fill='white' opacity='.76'/%3E%3Crect x='72' y='160' width='500' height='28' rx='14' fill='white' opacity='.44'/%3E%3Crect x='72' y='212' width='430' height='28' rx='14' fill='white' opacity='.32'/%3E%3C/svg%3E" />
+        <p class="copy">The image above should import as an image fill, not flattened into the page.</p>
+      </article>
+
+      <article class="asset-card">
+        <h2>Local raster fallback</h2>
+        <canvas id="chart" width="640" height="360"></canvas>
+        <p class="copy">The canvas should degrade locally into one image region while the surrounding layout remains editable.</p>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    const canvas = document.getElementById("chart");
+    const ctx = canvas.getContext("2d");
+    const gradient = ctx.createLinearGradient(0, 0, 640, 360);
+    gradient.addColorStop(0, "#0f172a");
+    gradient.addColorStop(1, "#2563eb");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 640, 360);
+    ctx.strokeStyle = "rgba(255,255,255,.7)";
+    ctx.lineWidth = 10;
+    ctx.beginPath();
+    ctx.moveTo(48, 260);
+    ctx.bezierCurveTo(160, 120, 260, 300, 360, 170);
+    ctx.bezierCurveTo(448, 56, 520, 142, 590, 82);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,.9)";
+    ctx.font = "700 28px Inter, sans-serif";
+    ctx.fillText("Canvas chart", 48, 64);
+  </script>
+</body>
+</html>

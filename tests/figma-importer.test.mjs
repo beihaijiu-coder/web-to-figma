@@ -276,6 +276,49 @@ test("images import as replaceable image fills and reuse duplicated assets", asy
   assert.equal(figma.createdImages.length, 1);
 });
 
+test("background images import as replaceable fills while keeping children editable", async () => {
+  const figma = createFakeFigma();
+  const scene = {
+    version: 1,
+    source: { url: "https://example.com/hero", selector: "#hero" },
+    viewport: { width: 1440, height: 900 },
+    assets: {
+      bg: {
+        src: "https://example.com/bg.png",
+        contentType: "image/png",
+        base64: "CQoLDA==",
+      },
+    },
+    root: {
+      kind: "frame",
+      name: "Hero",
+      rect: { x: 0, y: 0, width: 720, height: 360 },
+      style: {
+        backgroundAssetId: "bg",
+        objectFit: "cover",
+        borderRadius: 28,
+      },
+      children: [
+        {
+          kind: "text",
+          text: "Editable headline",
+          rect: { x: 48, y: 56, width: 260, height: 36 },
+          style: { fontFamily: "Inter", fontSize: 28, color: "rgb(255, 255, 255)" },
+        },
+      ],
+    },
+  };
+
+  const result = await importSceneToFigma(scene, { figma });
+
+  assert.equal(result.root.fills[0].type, "IMAGE");
+  assert.equal(result.root.fills[0].scaleMode, "FILL");
+  assert.equal(result.root.cornerRadius, 28);
+  assert.equal(result.root.children[0].type, "TEXT");
+  assert.equal(result.root.children[0].characters, "Editable headline");
+  assert.equal(figma.createdImages.length, 1);
+});
+
 test("layout preference switches safe flex containers between fixed and auto layout", async () => {
   const scene = {
     version: 1,

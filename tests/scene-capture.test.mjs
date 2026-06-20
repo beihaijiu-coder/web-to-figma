@@ -197,3 +197,54 @@ test("canvas regions become local raster assets instead of flattening the page",
   assert.equal(scene.assets["asset-1"].contentType, "image/png");
   assert.equal(scene.assets["asset-1"].base64, "QUJD");
 });
+
+test("css background images become replaceable scene assets", async () => {
+  const root = createElement("section", { x: 0, y: 0, width: 480, height: 280 }, {
+    id: "hero-bg",
+    childNodes: [createText("Background hero", { x: 32, y: 40, width: 220, height: 32 })],
+  });
+  root.computedStyle = {
+    display: "block",
+    backgroundImage: 'url("https://example.com/hero-bg.png")',
+    backgroundSize: "cover",
+    backgroundPosition: "center center",
+    borderRadius: "24px",
+    color: "rgb(255, 255, 255)",
+    fontFamily: "Inter",
+    fontSize: "24px",
+    fontWeight: "700",
+  };
+
+  const scene = await runSceneCapture({ root, selector: "#hero-bg" });
+
+  assert.equal(scene.root.kind, "frame");
+  assert.equal(scene.root.style.backgroundAssetId, "asset-1");
+  assert.equal(scene.root.style.objectFit, "cover");
+  assert.equal(scene.assets["asset-1"].src, "https://example.com/hero-bg.png");
+  assert.equal(scene.root.children[0].kind, "text");
+});
+
+test("data uri images carry base64 bytes for offline smoke testing", async () => {
+  const image = createElement("img", { x: 16, y: 16, width: 160, height: 90 }, {
+    src: "data:image/png;base64,MTIzNA==",
+    alt: "Inline asset",
+  });
+  const root = createElement("section", { x: 0, y: 0, width: 220, height: 140 }, {
+    id: "inline-assets",
+    childNodes: [image],
+  });
+  root.computedStyle = {
+    display: "block",
+    backgroundImage: 'url("data:image/png;base64,QUJDRA==")',
+    backgroundSize: "contain",
+  };
+
+  const scene = await runSceneCapture({ root, selector: "#inline-assets" });
+
+  const backgroundAsset = scene.assets[scene.root.style.backgroundAssetId];
+  const imageAsset = scene.assets[scene.root.children[0].assetId];
+  assert.equal(backgroundAsset.contentType, "image/png");
+  assert.equal(backgroundAsset.base64, "QUJDRA==");
+  assert.equal(imageAsset.contentType, "image/png");
+  assert.equal(imageAsset.base64, "MTIzNA==");
+});

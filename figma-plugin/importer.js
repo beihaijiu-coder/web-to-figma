@@ -166,9 +166,18 @@
     };
   }
 
-  function applyStyle(node, sourceNode) {
+  function applyStyle(node, sourceNode, scene, options = {}) {
     const style = sourceNode?.style || {};
-    const background = fillPaint(style.backgroundColor || style.background || style.fill);
+    const backgroundImageHash = style.backgroundAssetId
+      ? imageHashFor(figmaFromOptions(options), scene, { assetId: style.backgroundAssetId }, options)
+      : null;
+    const background = backgroundImageHash
+      ? {
+          type: "IMAGE",
+          scaleMode: imageScaleMode(sourceNode),
+          imageHash: backgroundImageHash,
+        }
+      : fillPaint(style.backgroundColor || style.background || style.fill);
     if (background) node.fills = [background];
 
     const stroke = solidPaint(style.borderColor);
@@ -180,6 +189,10 @@
 
     const shadow = parseShadow(style.boxShadow || style.shadow);
     if (shadow) node.effects = [shadow];
+  }
+
+  function figmaFromOptions(options = {}) {
+    return options.figma || globalThis.figma;
   }
 
   function applyLayout(node, sourceNode, options = {}) {
@@ -287,7 +300,7 @@
     const frame = figma.createFrame();
     frame.name = semanticName(sourceNode, "Frame");
     place(frame, rect, parentRect);
-    applyStyle(frame, sourceNode);
+    applyStyle(frame, sourceNode, options?.scene, options);
     applyLayout(frame, sourceNode, options);
     return frame;
   }
@@ -326,7 +339,7 @@
       typeof figma.createRectangle === "function" ? figma.createRectangle() : figma.createFrame();
     imageNode.name = semanticName(sourceNode, "Image");
     place(imageNode, rect, parentRect);
-    applyStyle(imageNode, sourceNode);
+    applyStyle(imageNode, sourceNode, scene, options);
 
     const imageHash = imageHashFor(figma, scene, sourceNode, options);
     if (imageHash) {
@@ -350,7 +363,7 @@
         : figma.createFrame();
     vector.name = semanticName(sourceNode, "Vector");
     place(vector, rect, parentRect);
-    applyStyle(vector, sourceNode);
+    applyStyle(vector, sourceNode, null, {});
     return vector;
   }
 
@@ -393,10 +406,11 @@
     rootFrame.x = 0;
     rootFrame.y = 0;
     rootFrame.resize(rootRect.width, rootRect.height);
-    applyStyle(rootFrame, sourceRoot);
-    applyLayout(rootFrame, sourceRoot, options);
-
     const importOptions = { ...options, assetCache: new Map() };
+    importOptions.figma = figma;
+    importOptions.scene = scene;
+    applyStyle(rootFrame, sourceRoot, scene, importOptions);
+    applyLayout(rootFrame, sourceRoot, importOptions);
     const children = sourceRoot.children || [];
     for (let index = 0; index < children.length; index++) {
       progress(options, "creating-nodes", { current: index + 1, total: children.length });

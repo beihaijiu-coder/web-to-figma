@@ -69,12 +69,25 @@
     return rect.width > 0 && rect.height > 0;
   }
 
-  function captureStyle(element) {
+  function firstBackgroundImageUrl(value) {
+    const match = String(value || "").match(/url\(\s*(["']?)(.*?)\1\s*\)/i);
+    if (!match || !match[2]) return "";
+
+    try {
+      return new URL(match[2], window.location.href).href;
+    } catch {
+      return match[2];
+    }
+  }
+
+  function captureStyle(element, assets) {
     const computed = styleFor(element);
-    return {
-      backgroundColor: computed.backgroundImage && computed.backgroundImage !== "none"
-        ? computed.backgroundImage
-        : computed.backgroundColor,
+    const backgroundImageUrl = firstBackgroundImageUrl(computed.backgroundImage);
+    const style = {
+      backgroundColor:
+        computed.backgroundImage && /^linear-gradient\(/i.test(computed.backgroundImage)
+          ? computed.backgroundImage
+          : computed.backgroundColor,
       borderColor: computed.borderColor || computed.borderTopColor,
       borderWidth: px(computed.borderWidth || computed.borderTopWidth),
       borderRadius: px(computed.borderRadius),
@@ -88,7 +101,18 @@
       lineHeight: computed.lineHeight,
       letterSpacing: computed.letterSpacing,
       objectFit: computed.objectFit,
+      backgroundSize: computed.backgroundSize,
+      backgroundPosition: computed.backgroundPosition,
     };
+
+    if (backgroundImageUrl && assets) {
+      style.backgroundAssetId = assetForUrl(backgroundImageUrl, assets);
+      style.objectFit = String(computed.backgroundSize || "").includes("contain")
+        ? "contain"
+        : "cover";
+    }
+
+    return style;
   }
 
   function captureLayout(element) {
@@ -122,6 +146,12 @@
     });
   }
 
+  function assetForUrl(url, assets) {
+    return String(url || "").startsWith("data:")
+      ? assetFromDataUrl(url, assets)
+      : assetIdFor(url, assets);
+  }
+
   function captureTextNode(node, rootRect) {
     const text = String(node.textContent || "").replace(/\s+/g, " ").trim();
     if (!text) return null;
@@ -151,9 +181,9 @@
     return {
       kind: "image",
       name: element.alt || element.getAttribute?.("aria-label") || elementName(element),
-      assetId: assetIdFor(src, assets),
+      assetId: assetForUrl(src, assets),
       rect,
-      style: captureStyle(element),
+      style: captureStyle(element, assets),
     };
   }
 
@@ -163,7 +193,7 @@
       name: element.getAttribute?.("aria-label") || elementName(element),
       svg: element.outerHTML || "<svg />",
       rect: rectFor(element, rootRect),
-      style: captureStyle(element),
+      style: captureStyle(element, {}),
     };
   }
 
@@ -188,7 +218,7 @@
         name: elementName(node),
         assetId: rasterAssetId,
         rect,
-        style: captureStyle(node),
+        style: captureStyle(node, assets),
       };
     }
 
@@ -206,7 +236,7 @@
       role: node.getAttribute?.("role") || "",
       ariaLabel: node.getAttribute?.("aria-label") || "",
       rect,
-      style: captureStyle(node),
+      style: captureStyle(node, assets),
       layout: captureLayout(node),
       children,
     };

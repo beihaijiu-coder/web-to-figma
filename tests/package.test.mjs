@@ -34,3 +34,18 @@ test("Figma plugin UI stays focused on import progress without commercial/report
     assert.equal(pattern.test(ui), false, `UI should not contain ${word}`);
   }
 });
+
+test("manual smoke fixture exercises the first commercial conversion path", () => {
+  const fixture = fs.readFileSync(new URL("../fixtures/manual-smoke.html", import.meta.url), "utf8");
+
+  for (const marker of [
+    "id=\"pricing-card\"",
+    "id=\"background-card\"",
+    "<canvas",
+    "<svg",
+    "<img",
+    "contenteditable=\"true\"",
+  ]) {
+    assert.equal(fixture.includes(marker), true, `fixture should contain ${marker}`);
+  }
+});
