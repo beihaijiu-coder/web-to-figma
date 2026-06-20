@@ -40,6 +40,8 @@ test("Figma plugin main script avoids syntax unsupported by Figma's plugin parse
 
   assert.equal(/\?\.|\?\?/.test(main), false, "Figma main script must not use optional chaining or ??");
   assert.equal(/\{\s*\.\.\.|\.\.\.[A-Za-z_$]/.test(main), false, "Figma main script must not use object spread/rest");
+  assert.equal(/\bcatch\s*\{/.test(main), false, "Figma main script must not use optional catch binding");
+  assert.equal(/\bglobalThis\b|\bmatchAll\s*\(/.test(main), false, "Figma main script must avoid newer runtime globals");
 });
 
 test("manual smoke fixture exercises the first commercial conversion path", () => {

@@ -1,12 +1,12 @@
 (function (root, factory) {
   if (typeof module === "object" && module.exports) {
-    module.exports = factory();
+    module.exports = factory(root);
   } else {
-    root.WebToFigmaImporter = factory();
+    root.WebToFigmaImporter = factory(root);
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function () {
+})(typeof self !== "undefined" ? self : this, function (runtimeRoot) {
   const DEFAULT_FONT = { family: "Inter", style: "Regular" };
-  const RUNTIME_GLOBAL = typeof globalThis !== "undefined" ? globalThis : this;
+  const RUNTIME_GLOBAL = runtimeRoot || {};
 
   function number(value, fallback = 0) {
     const parsed = Number(value);
@@ -118,9 +118,14 @@
     const raw = String(value || "");
     if (!/^linear-gradient\(/i.test(raw)) return null;
 
-    const colors = Array.from(raw.matchAll(/(#[0-9a-f]{3,6}|rgba?\([^)]+\))/gi))
-      .map((match) => parseColor(match[1]))
-      .filter(Boolean);
+    const colors = [];
+    const colorRegex = /(#[0-9a-f]{3,6}|rgba?\([^)]+\))/gi;
+    let match = colorRegex.exec(raw);
+    while (match) {
+      const color = parseColor(match[1]);
+      if (color) colors.push(color);
+      match = colorRegex.exec(raw);
+    }
     if (colors.length < 2) return null;
 
     return {
@@ -263,7 +268,7 @@
     try {
       await figma.loadFontAsync(fontName);
       return fontName;
-    } catch {
+    } catch (error) {
       await figma.loadFontAsync(fallbackFont);
       return fallbackFont;
     }
@@ -454,8 +459,8 @@
   };
 });
 
-(function () {
-  if (typeof figma === "undefined" || !figma.showUI || !globalThis.WebToFigmaImporter) {
+(function (runtimeRoot) {
+  if (typeof figma === "undefined" || !figma.showUI || !runtimeRoot.WebToFigmaImporter) {
     return;
   }
 
@@ -492,7 +497,7 @@
 
     cancelled = false;
     try {
-      const result = await globalThis.WebToFigmaImporter.importSceneToFigma(message.payload, {
+      const result = await runtimeRoot.WebToFigmaImporter.importSceneToFigma(message.payload, {
         figma,
         layoutMode: message.layoutMode || "visual",
         fallbackFont: message.fallbackFont || { family: "Inter", style: "Regular" },
@@ -514,4 +519,4 @@
       });
     }
   };
-})();
+})(typeof self !== "undefined" ? self : this);
