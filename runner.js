@@ -1,8 +1,10 @@
 (async () => {
   const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  if (!window.figma?.captureForDesign) {
-    throw new Error("window.figma.captureForDesign is not available. capture.js may not have loaded.");
+  if (!window.webToFigmaCaptureScene && !window.figma?.captureForDesign) {
+    throw new Error(
+      "No capture adapter is available. scene-capture.js may not have loaded."
+    );
   }
 
   const captureOptions = window.__FIGMA_CAPTURE_OPTIONS__ || {};
@@ -240,6 +242,12 @@
   emitProgress("capturing", { selector: captureSelector });
   const restoreIgnoredUi = hideIgnoredUi();
   try {
+    if (window.webToFigmaCaptureScene) {
+      return await window.webToFigmaCaptureScene(captureSelector, {
+        qualityMode: diagnostics.qualityMode,
+      });
+    }
+
     return await window.figma.captureForDesign({ selector: captureSelector });
   } finally {
     restoreIgnoredUi.forEach((restore) => restore());

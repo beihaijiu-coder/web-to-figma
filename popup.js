@@ -7,6 +7,7 @@ const toggle = document.getElementById("assetProxyToggle");
 const concurrency = document.getElementById("proxyConcurrency");
 const captureBtn = document.getElementById("captureBtn");
 const status = document.getElementById("status");
+let pendingCopyPayload = null;
 
 function setStatus(text) {
   status.textContent = text || "";
@@ -14,7 +15,17 @@ function setStatus(text) {
 
 function setBusy(busy) {
   captureBtn.disabled = busy;
-  captureBtn.textContent = busy ? "采集中..." : "开始采集";
+  captureBtn.textContent = busy ? "转换中..." : pendingCopyPayload ? "复制结果" : "捕获当前网页";
+}
+
+async function copyPayloadForFigma(payload) {
+  const text = JSON.stringify({
+    source: "web-to-figma",
+    type: "capture-scene",
+    payload,
+  });
+
+  await navigator.clipboard.writeText(text);
 }
 
 function normalizeConcurrency(value) {
@@ -48,6 +59,21 @@ concurrency.addEventListener("change", () => {
 });
 
 captureBtn.addEventListener("click", () => {
+  if (pendingCopyPayload) {
+    setBusy(true);
+    copyPayloadForFigma(pendingCopyPayload)
+      .then(() => {
+        pendingCopyPayload = null;
+        setBusy(false);
+        setStatus("已复制转换结果，请回到 Figma 插件导入。");
+      })
+      .catch((error) => {
+        setBusy(false);
+        setStatus(`复制失败：${error.message || error}`);
+      });
+    return;
+  }
+
   setBusy(true);
   setStatus("");
   chrome.runtime.sendMessage({ type: "FIGMA_CAPTURE_START" }, (res) => {
@@ -64,7 +90,16 @@ captureBtn.addEventListener("click", () => {
       return;
     }
 
-    setStatus("已触发采集，请查看下载文件。");
-    setTimeout(() => window.close(), 600);
+    copyPayloadForFigma(res.payload)
+      .then(() => {
+        pendingCopyPayload = null;
+        setStatus("已复制转换结果，请回到 Figma 插件点击“导入剪贴板”。");
+        setTimeout(() => window.close(), 900);
+      })
+      .catch((error) => {
+        pendingCopyPayload = res.payload;
+        captureBtn.textContent = "复制结果";
+        setStatus(`采集完成，但自动复制失败：${error.message || error}。请点击“复制结果”。`);
+      });
   });
 });

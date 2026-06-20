@@ -6,8 +6,8 @@
   "permissions": [
     "activeTab",
     "scripting",
-    "downloads",
-    "storage"
+    "storage",
+    "clipboardWrite"
   ],
   "background": {
     "service_worker": "background.js",
@@ -29,7 +29,7 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "capture.js",
+        "scene-capture.js",
         "runner.js",
         "logo/icon16.png"
       ],

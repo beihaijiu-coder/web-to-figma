@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Web to Figma</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #2f2f2f;
+      color: #f8fafc;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.18), transparent 38%),
+        #2f2f2f;
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    .shell {
+      min-height: 100vh;
+      padding: 24px;
+      display: grid;
+      gap: 18px;
+      align-content: start;
+    }
+
+    .top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 750;
+      letter-spacing: -0.02em;
+    }
+
+    .dot {
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, #22d3ee, #3b82f6);
+      color: white;
+      font-weight: 800;
+    }
+
+    .ghost {
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 999px;
+      background: transparent;
+      color: #e5e7eb;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+
+    .hero {
+      margin: 28px auto 8px;
+      width: 250px;
+      height: 150px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      background: rgba(17, 24, 39, 0.42);
+    }
+
+    .illustration {
+      width: 160px;
+      height: 96px;
+      position: relative;
+      border-radius: 10px;
+      background: rgba(15, 23, 42, 0.52);
+    }
+
+    .illustration::before,
+    .illustration::after {
+      content: "";
+      position: absolute;
+      border-radius: 7px;
+      background: #3b8f72;
+      left: 40px;
+      right: 34px;
+    }
+
+    .illustration::before {
+      top: 22px;
+      height: 24px;
+    }
+
+    .illustration::after {
+      top: 54px;
+      height: 18px;
+      left: 58px;
+      right: 52px;
+    }
+
+    .card-row {
+      position: absolute;
+      left: 24px;
+      right: 20px;
+      bottom: 16px;
+      display: grid;
+      grid-template-columns: 64px 1fr;
+      gap: 14px;
+      align-items: end;
+    }
+
+    .thumb {
+      height: 42px;
+      border-radius: 6px;
+      background: #a3a3a3;
+    }
+
+    .lines {
+      display: grid;
+      gap: 7px;
+    }
+
+    .lines span {
+      display: block;
+      height: 9px;
+      border-radius: 999px;
+      background: #4f75a8;
+    }
+
+    .lines span:last-child {
+      width: 60%;
+    }
+
+    .source {
+      text-align: center;
+      display: grid;
+      gap: 8px;
+      color: #d1d5db;
+      font-weight: 650;
+    }
+
+    .source small {
+      color: #9ca3af;
+      font-weight: 500;
+    }
+
+    .form {
+      display: grid;
+      gap: 10px;
+    }
+
+    .field,
+    .select {
+      width: 100%;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      background: rgba(17, 24, 39, 0.44);
+      color: #f8fafc;
+      padding: 11px 12px;
+      outline: none;
+    }
+
+    .field::placeholder {
+      color: #8b93a3;
+    }
+
+    .actions {
+      display: grid;
+      gap: 10px;
+    }
+
+    .primary,
+    .secondary,
+    .danger {
+      border: 0;
+      border-radius: 12px;
+      padding: 12px 14px;
+      cursor: pointer;
+      font-weight: 750;
+    }
+
+    .primary {
+      background: #22c55e;
+      color: #052e16;
+    }
+
+    .secondary {
+      background: #3b82f6;
+      color: white;
+    }
+
+    .danger {
+      background: transparent;
+      color: #34d399;
+    }
+
+    .primary:disabled,
+    .secondary:disabled,
+    .danger:disabled {
+      opacity: 0.55;
+      cursor: default;
+    }
+
+    .steps {
+      list-style: none;
+      padding: 4px 0 0;
+      margin: 0;
+      display: grid;
+      gap: 16px;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 10px;
+      color: #9ca3af;
+      font-size: 15px;
+      font-weight: 650;
+      align-items: center;
+    }
+
+    .num {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      background: #666;
+      color: white;
+    }
+
+    .step.active {
+      color: #60a5fa;
+    }
+
+    .step.active .num {
+      background: #3b82f6;
+    }
+
+    .bar {
+      grid-column: 2;
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+      overflow: hidden;
+      display: none;
+    }
+
+    .step.active .bar {
+      display: block;
+    }
+
+    .fill {
+      width: 12%;
+      height: 100%;
+      border-radius: inherit;
+      background: #60a5fa;
+      transition: width 160ms ease;
+    }
+
+    .message {
+      min-height: 24px;
+      color: #cbd5e1;
+      text-align: center;
+      line-height: 1.45;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="top">
+      <div class="brand"><span class="dot">W</span><span>Web to Figma</span></div>
+      <button id="closeBtn" class="ghost" type="button">Close</button>
+    </header>
+
+    <section class="hero" aria-hidden="true">
+      <div class="illustration">
+        <div class="card-row">
+          <div class="thumb"></div>
+          <div class="lines"><span></span><span></span><span></span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="source">
+      <div id="title">Ready to import</div>
+      <small id="subtitle">Capture in Chrome, then import from clipboard here.</small>
+    </section>
+
+    <section class="form" id="startPanel">
+      <select id="layoutMode" class="select">
+        <option value="visual">Visual fidelity first</option>
+        <option value="editable">Editable layout first</option>
+      </select>
+      <input id="fallbackFont" class="field" placeholder="Fallback font, e.g. Inter" value="Inter" />
+      <button id="importClipboardBtn" class="primary" type="button">Import clipboard capture</button>
+      <input id="urlInput" class="field" placeholder="Or enter URL to open in Chrome" />
+      <button id="openUrlBtn" class="secondary" type="button">Open URL in Chrome</button>
+    </section>
+
+    <section id="progressPanel" class="hidden">
+      <ol class="steps">
+        <li class="step active" data-step="handoff">
+          <span class="num">1</span><span>Access and load page</span>
+          <div class="bar"><div id="progressFill" class="fill"></div></div>
+        </li>
+        <li class="step" data-step="structure"><span class="num">2</span><span>Import page structure</span></li>
+        <li class="step" data-step="images"><span class="num">3</span><span>Import image resources</span></li>
+        <li class="step" data-step="static"><span class="num">4</span><span>Import other static resources</span></li>
+      </ol>
+      <p id="message" class="message"></p>
+      <div class="actions">
+        <button id="cancelBtn" class="danger" type="button">Cancel</button>
+        <button id="retryBtn" class="secondary hidden" type="button">Retry</button>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const startPanel = document.getElementById("startPanel");
+    const progressPanel = document.getElementById("progressPanel");
+    const title = document.getElementById("title");
+    const subtitle = document.getElementById("subtitle");
+    const message = document.getElementById("message");
+    const progressFill = document.getElementById("progressFill");
+    const retryBtn = document.getElementById("retryBtn");
+    const cancelBtn = document.getElementById("cancelBtn");
+    const layoutMode = document.getElementById("layoutMode");
+    const fallbackFont = document.getElementById("fallbackFont");
+    const urlInput = document.getElementById("urlInput");
+    let lastPayload = null;
+
+    function fallbackFontName() {
+      return { family: fallbackFont.value.trim() || "Inter", style: "Regular" };
+    }
+
+    function setProgress(step, percent, text) {
+      for (const node of document.querySelectorAll(".step")) {
+        node.classList.toggle("active", node.dataset.step === step);
+      }
+      progressFill.style.width = `${Math.max(8, Math.min(100, percent))}%`;
+      message.textContent = text || "";
+    }
+
+    function showProgress(payload) {
+      lastPayload = payload;
+      startPanel.classList.add("hidden");
+      progressPanel.classList.remove("hidden");
+      retryBtn.classList.add("hidden");
+      cancelBtn.classList.remove("hidden");
+      title.textContent = "Loading Page:";
+      subtitle.textContent = payload?.source?.url || "Clipboard capture";
+      setProgress("handoff", 18, "Preparing import...");
+    }
+
+    function showStart(text) {
+      startPanel.classList.remove("hidden");
+      progressPanel.classList.add("hidden");
+      title.textContent = "Ready to import";
+      subtitle.textContent = text || "Capture in Chrome, then import from clipboard here.";
+    }
+
+    function parseClipboardCapture(text) {
+      const parsed = JSON.parse(text);
+      if (parsed?.source === "web-to-figma" && parsed?.type === "capture-scene") {
+        return parsed.payload;
+      }
+      if (parsed?.version === 1 && parsed?.root) return parsed;
+      throw new Error("Clipboard does not contain a Web to Figma capture.");
+    }
+
+    function importPayload(payload) {
+      showProgress(payload);
+      parent.postMessage(
+        {
+          pluginMessage: {
+            type: "import-capture",
+            payload,
+            layoutMode: layoutMode.value,
+            fallbackFont: fallbackFontName(),
+          },
+        },
+        "*"
+      );
+    }
+
+    document.getElementById("importClipboardBtn").onclick = async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        importPayload(parseClipboardCapture(text));
+      } catch (error) {
+        title.textContent = "Import failed";
+        subtitle.textContent = error.message || String(error);
+      }
+    };
+
+    document.getElementById("openUrlBtn").onclick = async () => {
+      try {
+        const url = new URL(urlInput.value.trim());
+        await navigator.clipboard.writeText(
+          JSON.stringify({
+            source: "web-to-figma",
+            type: "url-capture-request",
+            url: url.href,
+            layoutMode: layoutMode.value,
+          })
+        );
+        window.open(url.href, "_blank");
+        title.textContent = "Chrome opened";
+        subtitle.textContent = "Capture that page with the Chrome extension, then import clipboard here.";
+      } catch {
+        title.textContent = "Invalid URL";
+        subtitle.textContent = "Enter a full http:// or https:// URL.";
+      }
+    };
+
+    cancelBtn.onclick = () => {
+      parent.postMessage({ pluginMessage: { type: "cancel-import" } }, "*");
+      setProgress("static", 100, "Cancelling...");
+    };
+
+    retryBtn.onclick = () => {
+      if (lastPayload) importPayload(lastPayload);
+    };
+
+    document.getElementById("closeBtn").onclick = () => {
+      parent.postMessage({ pluginMessage: { type: "close" } }, "*");
+    };
+
+    window.onmessage = (event) => {
+      const msg = event.data.pluginMessage;
+      if (!msg) return;
+
+      if (msg.type === "import-progress") {
+        if (msg.stage === "import-started") setProgress("structure", 34, "Import page structure...");
+        if (msg.stage === "creating-nodes") setProgress("images", 66, "Import image resources...");
+        if (msg.stage === "completed") setProgress("static", 100, "");
+      }
+
+      if (msg.type === "import-complete") {
+        setProgress("static", 100, "");
+        setTimeout(() => showStart("Import complete. Your Figma result is selected."), 450);
+      }
+
+      if (msg.type === "import-cancelled") {
+        showStart("Cancelled. Partial layers were removed.");
+      }
+
+      if (msg.type === "import-failed") {
+        cancelBtn.classList.add("hidden");
+        retryBtn.classList.remove("hidden");
+        title.textContent = "Import failed";
+        subtitle.textContent = msg.message || "Please retry.";
+        message.textContent = "Retry";
+      }
+    };
+  </script>
+</body>
+</html>

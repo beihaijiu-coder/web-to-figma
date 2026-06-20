@@ -1,5 +1,5 @@
 const WORLD = "ISOLATED";
-const CAPTURE_FILE = "capture.js";
+const CAPTURE_FILE = "scene-capture.js";
 const RUNNER_FILE = "runner.js";
 const TOOLBAR_FILE = "inpage-toolbar.js";
 const FIGMA_CAPTURE_CONCURRENCY_KEY = "proxyFetchConcurrency";
@@ -73,27 +73,20 @@ async function runCapture(tabId, options = {}) {
   };
 }
 
-function saveResult(result) {
-  const text = typeof result === "string" ? result : JSON.stringify(result, null, 2);
-  const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
-  const filename = `figma-capture-${Date.now()}.json`;
-
-  chrome.downloads.download({ url, filename, saveAs: true }, () => {
-    setTimeout(() => URL.revokeObjectURL(url), 3000);
-  });
-}
-
 function parseResultDiagnostics(result) {
   try {
     const parsed = typeof result === "string" ? JSON.parse(result) : result;
     const assets = parsed && typeof parsed.assets === "object" ? parsed.assets : null;
-    const failures = Array.isArray(parsed?.diagnostics?.failures)
+    const diagnosticFailures = Array.isArray(parsed?.diagnostics?.failures)
       ? parsed.diagnostics.failures
       : [];
+    const assetFailures = assets
+      ? Object.values(assets).filter((asset) => asset && asset.error).length
+      : 0;
 
     return {
       assetsDiscovered: assets ? Object.keys(assets).length : 0,
-      assetFailures: failures.length,
+      assetFailures: diagnosticFailures.length + assetFailures,
     };
   } catch {
     return {
@@ -101,6 +94,39 @@ function parseResultDiagnostics(result) {
       assetFailures: 0,
     };
   }
+}
+
+function normalizeCapturePayload(result) {
+  if (typeof result === "string") {
+    try {
+      return JSON.parse(result);
+    } catch {
+      return { version: 1, root: null, raw: result };
+    }
+  }
+
+  return result && typeof result === "object" ? result : null;
+}
+
+async function hydrateSceneAssets(scene) {
+  const assets = scene && typeof scene.assets === "object" ? scene.assets : null;
+  if (!assets) return scene;
+
+  await loadProxySession();
+  await Promise.all(
+    Object.values(assets).map(async (asset) => {
+      if (!asset || asset.base64 || asset.data || !asset.src) return;
+      const fetched = await proxyFetchAsset(asset.src);
+      if (fetched?.ok && fetched.base64) {
+        asset.base64 = fetched.base64;
+        asset.contentType = fetched.contentType || asset.contentType || "application/octet-stream";
+      } else {
+        asset.error = fetched?.error || "ASSET_FETCH_FAILED";
+      }
+    })
+  );
+
+  return scene;
 }
 
 function normalizeConcurrency(value) {
@@ -269,7 +295,7 @@ async function proxyFetchAsset(rawUrl) {
 
       try {
         response = await fetch(url, {
-          credentials: "omit",
+          credentials: "include",
           signal: controller.signal,
         });
       } finally {
@@ -348,17 +374,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       }
 
       const { result, diagnostics } = await runCapture(tab.id, msg.options || {});
-      if (!result) {
+      const payload = await hydrateSceneAssets(normalizeCapturePayload(result));
+      if (!payload) {
         throw new Error("Capture returned empty result");
       }
 
-      saveResult(result);
       const proxyEntries = figmaProxyDiagnostics.slice(proxyDiagStart);
       sendResponse({
         ok: true,
+        payload,
         diagnostics: {
           preparation: diagnostics,
-          payload: parseResultDiagnostics(result),
+          payload: parseResultDiagnostics(payload),
           proxy: {
             requests: proxyEntries.length,
             successes: proxyEntries.filter((x) => x && x.ok === true).length,

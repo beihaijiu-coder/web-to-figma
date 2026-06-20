@@ -15,6 +15,7 @@ function createRunnerContext({
   fontsReady = Promise.resolve(),
   maxTimers = Number.POSITIVE_INFINITY,
   captureResult,
+  sceneCaptureResult,
   captureOptions,
 } = {}) {
   const scrolls = [];
@@ -78,6 +79,13 @@ function createRunnerContext({
       },
     },
   };
+
+  if (sceneCaptureResult) {
+    window.webToFigmaCaptureScene = async (selector, options) => {
+      captureCalls.push({ selector, ...options, sceneCapture: true });
+      return sceneCaptureResult({ selector, options, images });
+    };
+  }
 
   const context = vm.createContext({
     window,
@@ -295,6 +303,21 @@ test("runner captures the requested selector", async () => {
 
   assert.equal(captureCalls.length, 1);
   assert.equal(captureCalls[0].selector, "#pricing-card");
+});
+
+test("runner prefers the Web to Figma scene capture when it is available", async () => {
+  const { captureCalls, result } = await runRunner({
+    captureOptions: { selector: "#hero", qualityMode: "standard" },
+    sceneCaptureResult: ({ selector }) => ({
+      version: 1,
+      root: { kind: "frame", name: selector, rect: { x: 0, y: 0, width: 100, height: 80 } },
+    }),
+  });
+
+  assert.equal(captureCalls.length, 1);
+  assert.equal(captureCalls[0].sceneCapture, true);
+  assert.equal(captureCalls[0].selector, "#hero");
+  assert.equal(result.root.name, "#hero");
 });
 
 test("runner hides extension UI while capturing and restores it after", async () => {

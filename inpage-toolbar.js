@@ -296,10 +296,9 @@
           </select>
         </label>
         <p class="hint" data-figma-capture-ignore="1">高清会优先采集大图；代理可减少丢图，但会变慢。</p>
-        <p class="safety" data-figma-capture-ignore="1">请只采集普通或公开网页，别在银行、邮箱、后台、聊天记录、私人文档页面使用。</p>
         <p class="status" id="figmaCaptureStatus" data-figma-capture-ignore="1"></p>
         <div class="actions" data-figma-capture-ignore="1">
-          <button class="capture" id="figmaCaptureBtn" type="button" data-figma-capture-ignore="1">开始采集</button>
+          <button class="capture" id="figmaCaptureBtn" type="button" data-figma-capture-ignore="1">捕获当前网页</button>
           <button class="capture secondary" id="figmaSelectBtn" type="button" data-figma-capture-ignore="1">选择组件</button>
         </div>
       </div>
@@ -317,7 +316,7 @@
       scrolling: "正在滚动页面加载图片...",
       "loading-images": `正在等待图片加载... 已发现 ${detail.imagesDiscovered ?? 0} 张`,
       "loading-fonts": "正在等待字体加载...",
-      capturing: "正在生成采集文件...",
+      capturing: "正在生成转换数据...",
     };
 
     return map[stage] || "正在采集...";
@@ -347,7 +346,33 @@
       parts.push(`代理成功 ${proxy.successes || 0} 个，失败 ${proxy.failures || 0} 个`);
     }
 
-    return parts.length ? parts.join("；") : "已触发下载。";
+    return parts.length ? parts.join("；") : "已复制转换结果。";
+  }
+
+  async function copyPayloadForFigma(payload) {
+    const text = JSON.stringify({
+      source: "web-to-figma",
+      type: "capture-scene",
+      payload,
+    });
+
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    Object.assign(textarea.style, {
+      position: "fixed",
+      top: "0",
+      left: "-9999px",
+    });
+    document.documentElement.appendChild(textarea);
+    textarea.select();
+    document.execCommand("copy");
+    textarea.remove();
   }
 
   function escapeSelectorPart(value) {
@@ -420,6 +445,7 @@
   const captureBtn = root.querySelector("#figmaCaptureBtn");
   const selectBtn = root.querySelector("#figmaSelectBtn");
   const status = root.querySelector("#figmaCaptureStatus");
+  let pendingCopyPayload = null;
 
   function setStatus(text, tone = "") {
     status.textContent = text || "";
@@ -429,7 +455,7 @@
 
   function setBusy(busy) {
     captureBtn.disabled = busy;
-    captureBtn.textContent = busy ? "采集中..." : "开始采集";
+    captureBtn.textContent = busy ? "转换中..." : pendingCopyPayload ? "复制结果" : "捕获当前网页";
     quality.disabled = busy;
     toggle.disabled = busy;
     concurrency.disabled = busy;
@@ -437,6 +463,7 @@
   }
 
   function startCapture(selector = "body") {
+    pendingCopyPayload = null;
     setBusy(true);
     setStatus(selector === "body" ? "准备开始采集..." : `准备采集：${selector}`);
     chrome.runtime.sendMessage(
@@ -463,10 +490,40 @@
           return;
         }
 
-        const summary = summarizeDiagnostics(res.diagnostics);
-        setStatus(summary === "已触发下载。" ? summary : `已触发下载。${summary}`, "success");
+        copyPayloadForFigma(res.payload)
+          .then(() => {
+            pendingCopyPayload = null;
+            const summary = summarizeDiagnostics(res.diagnostics);
+            setStatus(
+              summary === "已复制转换结果。"
+                ? "已复制转换结果，请回到 Figma 插件导入。"
+                : `已复制转换结果，请回到 Figma 插件导入。${summary}`,
+              "success"
+            );
+          })
+          .catch((error) => {
+            pendingCopyPayload = res.payload;
+            captureBtn.textContent = "复制结果";
+            setStatus(`采集完成，但自动复制失败：${error.message || error}。请点击“复制结果”。`);
+          });
       }
     );
+  }
+
+  function copyPendingPayload() {
+    if (!pendingCopyPayload) return false;
+    setBusy(true);
+    copyPayloadForFigma(pendingCopyPayload)
+      .then(() => {
+        pendingCopyPayload = null;
+        setBusy(false);
+        setStatus("已复制转换结果，请回到 Figma 插件导入。", "success");
+      })
+      .catch((error) => {
+        setBusy(false);
+        setStatus(`复制失败：${error.message || error}`, "error");
+      });
+    return true;
   }
 
   function startSelectionMode() {
@@ -611,6 +668,7 @@
   });
 
   captureBtn.addEventListener("click", () => {
+    if (copyPendingPayload()) return;
     startCapture("body");
   });
 
