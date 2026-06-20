@@ -47,7 +47,8 @@ The plugin prioritizes usable output: conventional web content remains editable,
 
 ## Implementation Decisions
 
-- The first delivery is a paired Chrome extension and Figma plugin. Figma is the only design target and desktop Chrome is the only formally supported capture browser.
+- The existing baseline is a Manifest V3 Chrome capture extension. It already supports complete-page preparation, component selection, lazy-asset preparation, HD asset selection, and a JSON download result. It does not contain a Figma plugin or Figma node importer. The MVP extends this baseline into a paired Chrome extension and Figma plugin rather than replacing working capture behavior.
+- Figma is the only design target and desktop Chrome is the only formally supported capture browser.
 - The plugin supports only two capture methods: complete page capture and selected-component capture. Current-viewport capture, multi-URL batches, multi-tab batches, and interaction-flow recording are excluded.
 - Every task is a single-page conversion at the page's current rendered responsive state. The product does not generate multiple breakpoints in one task.
 - A URL entered in Figma is a Chrome-capture command, not a request for the Figma plugin or a cloud renderer to crawl a site directly.
@@ -59,6 +60,7 @@ The plugin prioritizes usable output: conventional web content remains editable,
 - Layer names come from deterministic webpage semantics such as ARIA labels, roles, meaningful identifiers, and text summaries. Generative AI naming is not part of the first release.
 - Image assets are deduplicated per task. The functional MVP must create replaceable image nodes; entitlement-based image-resolution differences are deferred with payments and subscriptions.
 - The user-facing processing UI follows the supplied dark progress-panel reference: central page illustration, source URL, vertical staged progress, current-stage progress, and cancel. Account, credit, upgrade, duplicate bilingual metadata, and technical diagnostics are not part of this MVP UI.
+- The existing proxy, concurrency, diagnostics, and asset-quality controls are engineering mechanisms, not the normal user journey. The MVP UI hides them behind non-primary development or recovery surfaces until a user need justifies exposing them.
 - Success navigates directly to the created result. No conversion report, statistics panel, routine warning list, or completion dashboard is shown.
 - A complete-task failure shows one short, actionable message with retry. Local visual degradation that successfully preserves the result does not interrupt the user.
 - Cancellation is transactional from the user's perspective: halt work, remove every node created by the task, and return to the starting state.
@@ -75,7 +77,7 @@ The plugin prioritizes usable output: conventional web content remains editable,
 - Add end-to-end tests for the two capture methods, the Figma-URL-to-Chrome handoff, progress updates, successful focus on the result, retry after full failure, and cancellation cleanup.
 - Test user-facing behavior for silent font substitution and local degradation: the import completes without a report, while complete failure exposes only a concise retry path.
 - Test large-page responsiveness by exercising batched Figma node creation and cancellation during active creation; the Figma UI must not remain frozen and no partial nodes may remain after cancellation.
-- There is no existing code or test suite in the repository. These fixture and end-to-end seams are the initial quality baseline and must be created before feature expansion.
+- Existing prior art is the Node-based `runner` test suite, which covers full-page preparation, bounded lazy-loading scroll, HD asset promotion, progress events, component selector forwarding, and temporary hiding of extension UI. Preserve and extend this seam; add fixture and end-to-end seams before feature expansion.
 
 ## Out of Scope
 
@@ -95,3 +97,4 @@ The plugin prioritizes usable output: conventional web content remains editable,
 - The shared language in `CONTEXT.md` is authoritative for future work. `争议文档.md` records deliberately deferred product decisions and must not be mistaken for current MVP scope.
 - Existing commercial decisions remain useful future context, but the implementation order is explicit: make the core plugin reliable and pleasant before reconnecting payment, web, or broader platform work.
 - The plugin must avoid page-type or ownership whitelists in its product behavior. Browser and Figma platform limitations may require visible-content degradation, but must not cause unrelated elements to stop a task.
+- The current extension's JSON-download behavior is a technical bridge only. The intended MVP completion path is import into Figma, not asking the user to manage an exported JSON file.
