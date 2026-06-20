@@ -35,6 +35,13 @@ test("Figma plugin UI stays focused on import progress without commercial/report
   }
 });
 
+test("Figma plugin main script avoids syntax unsupported by Figma's plugin parser", () => {
+  const main = fs.readFileSync(new URL("../figma-plugin/importer.js", import.meta.url), "utf8");
+
+  assert.equal(/\?\.|\?\?/.test(main), false, "Figma main script must not use optional chaining or ??");
+  assert.equal(/\{\s*\.\.\.|\.\.\.[A-Za-z_$]/.test(main), false, "Figma main script must not use object spread/rest");
+});
+
 test("manual smoke fixture exercises the first commercial conversion path", () => {
   const fixture = fs.readFileSync(new URL("../fixtures/manual-smoke.html", import.meta.url), "utf8");
 

@@ -6,6 +6,7 @@
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   const DEFAULT_FONT = { family: "Inter", style: "Regular" };
+  const RUNTIME_GLOBAL = typeof globalThis !== "undefined" ? globalThis : this;
 
   function number(value, fallback = 0) {
     const parsed = Number(value);
@@ -13,7 +14,7 @@
   }
 
   function rectOf(node) {
-    const rect = node?.rect || {};
+    const rect = node && node.rect ? node.rect : {};
     return {
       x: number(rect.x),
       y: number(rect.y),
@@ -37,20 +38,20 @@
   }
 
   function semanticName(node, fallback) {
-    if (node?.kind === "text" && !node.name) {
+    if (node && node.kind === "text" && !node.name) {
       const prefix = titleCase(node.role || node.tag || "Text");
       const summary = textSummary(node.text);
       return summary ? `${prefix} · ${summary}` : prefix;
     }
 
-    const raw = String(node?.name || node?.ariaLabel || node?.role || node?.tag || fallback || "")
+    const raw = String((node && (node.name || node.ariaLabel || node.role || node.tag)) || fallback || "")
       .replace(/\s+/g, " ")
       .trim();
     return raw || fallback;
   }
 
   function rootName(scene, rootNode) {
-    return `Web to Figma · ${semanticName(rootNode, scene?.source?.url || "Capture")}`;
+    return `Web to Figma · ${semanticName(rootNode, (scene && scene.source && scene.source.url) || "Capture")}`;
   }
 
   function fontStyleFromWeight(weight) {
@@ -143,9 +144,10 @@
     const raw = String(value || "");
     if (!raw || raw === "none") return null;
     const colorMatch = raw.match(/rgba?\([^)]+\)|#[0-9a-f]{3,6}/i);
-    const color = parseColor(colorMatch?.[0] || "rgba(0, 0, 0, 0.2)");
+    const colorMatchValue = colorMatch ? colorMatch[0] : "";
+    const color = parseColor(colorMatchValue || "rgba(0, 0, 0, 0.2)");
     const numeric = raw
-      .replace(colorMatch?.[0] || "", "")
+      .replace(colorMatchValue || "", "")
       .trim()
       .split(/\s+/)
       .map((part) => Number.parseFloat(part))
@@ -154,10 +156,10 @@
       type: "DROP_SHADOW",
       visible: true,
       color: {
-        r: color?.r ?? 0,
-        g: color?.g ?? 0,
-        b: color?.b ?? 0,
-        a: color?.a ?? 0.2,
+        r: color ? color.r : 0,
+        g: color ? color.g : 0,
+        b: color ? color.b : 0,
+        a: color ? color.a : 0.2,
       },
       offset: { x: numeric[0] || 0, y: numeric[1] || 0 },
       radius: Math.max(0, numeric[2] || 0),
@@ -167,7 +169,7 @@
   }
 
   function applyStyle(node, sourceNode, scene, options = {}) {
-    const style = sourceNode?.style || {};
+    const style = sourceNode && sourceNode.style ? sourceNode.style : {};
     const backgroundImageHash = style.backgroundAssetId
       ? imageHashFor(figmaFromOptions(options), scene, { assetId: style.backgroundAssetId }, options)
       : null;
@@ -192,13 +194,13 @@
   }
 
   function figmaFromOptions(options = {}) {
-    return options.figma || globalThis.figma;
+    return options.figma || RUNTIME_GLOBAL.figma;
   }
 
   function applyLayout(node, sourceNode, options = {}) {
     if (options.layoutMode !== "editable") return;
 
-    const layout = sourceNode?.layout || {};
+    const layout = sourceNode && sourceNode.layout ? sourceNode.layout : {};
     const display = String(layout.display || "").toLowerCase();
     const direction = String(layout.flexDirection || layout.direction || "row").toLowerCase();
     const isFlex = display === "flex" || display === "inline-flex";
@@ -206,7 +208,10 @@
     if (!isFlex && !isSimpleGrid) return;
 
     node.layoutMode = direction.includes("column") ? "VERTICAL" : "HORIZONTAL";
-    node.itemSpacing = number(layout.gap ?? layout.columnGap ?? layout.rowGap, 0);
+    node.itemSpacing = number(
+      layout.gap !== undefined ? layout.gap : layout.columnGap !== undefined ? layout.columnGap : layout.rowGap,
+      0
+    );
 
     const align = String(layout.alignItems || "").toLowerCase();
     if (align === "center") node.counterAxisAlignItems = "CENTER";
@@ -236,7 +241,9 @@
   }
 
   function imageScaleMode(sourceNode) {
-    const fit = String(sourceNode?.style?.objectFit || sourceNode?.fit || "").toLowerCase();
+    const fit = String(
+      (sourceNode && sourceNode.style && sourceNode.style.objectFit) || (sourceNode && sourceNode.fit) || ""
+    ).toLowerCase();
     if (fit === "contain" || fit === "scale-down") return "FIT";
     if (fit === "fill") return "STRETCH";
     if (fit === "tile") return "TILE";
@@ -244,13 +251,13 @@
   }
 
   async function loadFont(figma, node, fallbackFont = DEFAULT_FONT) {
-    const family = String(node?.style?.fontFamily || DEFAULT_FONT.family)
+    const family = String((node && node.style && node.style.fontFamily) || DEFAULT_FONT.family)
       .split(",")[0]
       .replace(/^["']|["']$/g, "")
       .trim() || DEFAULT_FONT.family;
     const fontName = {
       family,
-      style: fontStyleFromWeight(node?.style?.fontWeight),
+      style: fontStyleFromWeight(node && node.style ? node.style.fontWeight : undefined),
     };
 
     try {
@@ -275,20 +282,24 @@
   }
 
   function progress(options, stage, detail = {}) {
-    if (typeof options?.onProgress === "function") {
-      options.onProgress({ stage, ...detail });
+    if (options && typeof options.onProgress === "function") {
+      const event = { stage: stage };
+      for (const key in detail || {}) {
+        if (Object.prototype.hasOwnProperty.call(detail, key)) event[key] = detail[key];
+      }
+      options.onProgress(event);
     }
   }
 
   function isCancelled(options) {
-    if (typeof options?.shouldCancel === "function" && options.shouldCancel()) return true;
-    if (options?.signal?.aborted) return true;
+    if (options && typeof options.shouldCancel === "function" && options.shouldCancel()) return true;
+    if (options && options.signal && options.signal.aborted) return true;
     return false;
   }
 
   function cleanupCancelled(figma, rootFrame, options) {
     try {
-      if (figma?.currentPage) figma.currentPage.selection = [];
+      if (figma && figma.currentPage) figma.currentPage.selection = [];
       if (rootFrame && typeof rootFrame.remove === "function") rootFrame.remove();
     } finally {
       progress(options, "cancelled");
@@ -300,7 +311,7 @@
     const frame = figma.createFrame();
     frame.name = semanticName(sourceNode, "Frame");
     place(frame, rect, parentRect);
-    applyStyle(frame, sourceNode, options?.scene, options);
+    applyStyle(frame, sourceNode, options && options.scene, options);
     applyLayout(frame, sourceNode, options);
     return frame;
   }
@@ -309,19 +320,19 @@
     const rect = rectOf(sourceNode);
     const text = figma.createText();
     text.name = semanticName(sourceNode, "Text");
-    text.fontName = await loadFont(figma, sourceNode, options?.fallbackFont || DEFAULT_FONT);
-    text.characters = String(sourceNode?.text || "");
-    if (sourceNode?.style?.fontSize) text.fontSize = number(sourceNode.style.fontSize, 16);
-    const color = solidPaint(sourceNode?.style?.color);
+    text.fontName = await loadFont(figma, sourceNode, (options && options.fallbackFont) || DEFAULT_FONT);
+    text.characters = String((sourceNode && sourceNode.text) || "");
+    if (sourceNode && sourceNode.style && sourceNode.style.fontSize) text.fontSize = number(sourceNode.style.fontSize, 16);
+    const color = solidPaint(sourceNode && sourceNode.style ? sourceNode.style.color : undefined);
     if (color) text.fills = [color];
     place(text, rect, parentRect);
     return text;
   }
 
   function imageHashFor(figma, scene, sourceNode, options) {
-    const assetId = sourceNode?.assetId || sourceNode?.src;
-    const asset = scene?.assets?.[assetId] || sourceNode?.asset || null;
-    const cacheKey = assetId || asset?.src || sourceNode?.src;
+    const assetId = (sourceNode && (sourceNode.assetId || sourceNode.src)) || "";
+    const asset = (scene && scene.assets && scene.assets[assetId]) || (sourceNode && sourceNode.asset) || null;
+    const cacheKey = assetId || (asset && asset.src) || (sourceNode && sourceNode.src);
     if (!cacheKey || !asset) return null;
 
     if (!options.assetCache) options.assetCache = new Map();
@@ -368,33 +379,33 @@
   }
 
   async function createNode(figma, scene, sourceNode, parentRect, options) {
-    if (sourceNode?.kind === "text") {
+    if (sourceNode && sourceNode.kind === "text") {
       return createText(figma, sourceNode, parentRect, options);
     }
 
-    if (sourceNode?.kind === "image" || sourceNode?.kind === "raster") {
+    if (sourceNode && (sourceNode.kind === "image" || sourceNode.kind === "raster")) {
       return createImageNode(figma, scene, sourceNode, parentRect, options);
     }
 
-    if (sourceNode?.kind === "svg") {
+    if (sourceNode && sourceNode.kind === "svg") {
       return createSvgNode(figma, sourceNode, parentRect);
     }
 
     const frame = createFrame(figma, sourceNode, parentRect, options);
     const frameRect = rectOf(sourceNode);
-    for (const child of sourceNode?.children || []) {
+    for (const child of (sourceNode && sourceNode.children) || []) {
       append(frame, await createNode(figma, scene, child, frameRect, options));
     }
     return frame;
   }
 
   async function importSceneToFigma(scene, options = {}) {
-    const figma = options.figma || globalThis.figma;
+    const figma = options.figma || RUNTIME_GLOBAL.figma;
     if (!figma) {
       throw new Error("Figma API is not available");
     }
 
-    const sourceRoot = scene?.root;
+    const sourceRoot = scene && scene.root;
     if (!sourceRoot) {
       throw new Error("Capture scene is missing a root node");
     }
@@ -406,7 +417,11 @@
     rootFrame.x = 0;
     rootFrame.y = 0;
     rootFrame.resize(rootRect.width, rootRect.height);
-    const importOptions = { ...options, assetCache: new Map() };
+    const importOptions = {};
+    for (const key in options || {}) {
+      if (Object.prototype.hasOwnProperty.call(options, key)) importOptions[key] = options[key];
+    }
+    importOptions.assetCache = new Map();
     importOptions.figma = figma;
     importOptions.scene = scene;
     applyStyle(rootFrame, sourceRoot, scene, importOptions);
@@ -447,7 +462,11 @@
   let cancelled = false;
 
   function post(type, payload = {}) {
-    figma.ui.postMessage({ type, ...payload });
+    const message = { type: type };
+    for (const key in payload || {}) {
+      if (Object.prototype.hasOwnProperty.call(payload, key)) message[key] = payload[key];
+    }
+    figma.ui.postMessage(message);
   }
 
   figma.showUI(__html__, {
@@ -491,7 +510,7 @@
       post("import-complete");
     } catch (error) {
       post("import-failed", {
-        message: error?.message || String(error),
+        message: (error && error.message) || String(error),
       });
     }
   };
