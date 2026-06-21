@@ -201,6 +201,98 @@
         line-height: 1.45;
       }
 
+      #${ROOT_ID} .copy-card {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 132px;
+        gap: 12px;
+        align-items: center;
+        padding: 12px;
+        border-radius: 12px;
+        border: 1px solid #dbeafe;
+        background: #f8fbff;
+      }
+
+      #${ROOT_ID} .copy-card-text {
+        min-width: 0;
+        display: grid;
+        gap: 4px;
+      }
+
+      #${ROOT_ID} .copy-title {
+        margin: 0;
+        font-size: 15px;
+        line-height: 1.2;
+        font-weight: 700;
+        color: #111827;
+      }
+
+      #${ROOT_ID} .copy-description {
+        margin: 0;
+        font-size: 12px;
+        line-height: 1.4;
+        color: #4b5563;
+      }
+
+      #${ROOT_ID} .copy-action {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        width: 100%;
+        min-height: 48px;
+        border: 0;
+        border-radius: 10px;
+        background: #1d9bf0;
+        color: #fff;
+        font-size: 17px;
+        font-weight: 650;
+        cursor: pointer;
+        box-shadow: 0 8px 20px rgba(29, 155, 240, 0.22);
+        transition: transform 0.08s ease, background 0.15s ease, box-shadow 0.15s ease;
+      }
+
+      #${ROOT_ID} .copy-action:hover {
+        background: #0f8de3;
+        box-shadow: 0 10px 24px rgba(29, 155, 240, 0.28);
+      }
+
+      #${ROOT_ID} .copy-action:active {
+        transform: translateY(1px);
+      }
+
+      #${ROOT_ID} .copy-action:disabled {
+        opacity: 0.65;
+        cursor: default;
+      }
+
+      #${ROOT_ID} .copy-icon {
+        width: 21px;
+        height: 21px;
+        display: block;
+        flex-shrink: 0;
+      }
+
+      #${ROOT_ID} .copy-json {
+        width: max-content;
+        border: 0;
+        background: transparent;
+        color: #2563eb;
+        font-size: 12px;
+        font-weight: 650;
+        padding: 0;
+        cursor: pointer;
+        text-align: left;
+      }
+
+      #${ROOT_ID} .copy-json:hover {
+        text-decoration: underline;
+      }
+
+      #${ROOT_ID} .copy-json:disabled {
+        opacity: 0.55;
+        cursor: default;
+      }
+
       #${ROOT_ID} .actions {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -297,6 +389,24 @@
         </label>
         <p class="hint" data-figma-capture-ignore="1">高清会优先采集大图；代理可减少丢图，但会变慢。</p>
         <p class="status" id="figmaCaptureStatus" data-figma-capture-ignore="1"></p>
+        <section class="copy-card hidden" id="figmaCopyCard" data-figma-capture-ignore="1">
+          <div class="copy-card-text" data-figma-capture-ignore="1">
+            <p class="copy-title" data-figma-capture-ignore="1">Copy to clipboard</p>
+            <p class="copy-description" id="figmaCopyDescription" data-figma-capture-ignore="1">
+              Capture is ready for Figma import.
+            </p>
+            <button class="copy-json" id="figmaCopyJsonBtn" type="button" data-figma-capture-ignore="1">
+              Copy JSON for plugin import
+            </button>
+          </div>
+          <button class="copy-action" id="figmaCopyBtn" type="button" data-figma-capture-ignore="1">
+            <svg class="copy-icon" viewBox="0 0 24 24" aria-hidden="true" data-figma-capture-ignore="1">
+              <path d="M8 8h10v12H8z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path>
+              <path d="M5 16H4V4h12v1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+            <span data-figma-capture-ignore="1">Copy</span>
+          </button>
+        </section>
         <div class="actions" data-figma-capture-ignore="1">
           <button class="capture" id="figmaCaptureBtn" type="button" data-figma-capture-ignore="1">捕获当前网页</button>
           <button class="capture secondary" id="figmaSelectBtn" type="button" data-figma-capture-ignore="1">选择组件</button>
@@ -363,6 +473,175 @@
 
     const textarea = document.createElement("textarea");
     textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    Object.assign(textarea.style, {
+      position: "fixed",
+      top: "0",
+      left: "-9999px",
+    });
+    document.documentElement.appendChild(textarea);
+    textarea.select();
+    document.execCommand("copy");
+    textarea.remove();
+  }
+
+  function escapeXml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function numberAttr(value, fallback = 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? Math.round(parsed * 100) / 100 : fallback;
+  }
+
+  function rgbaToHex(value, fallback = "") {
+    const raw = String(value || "").trim();
+    const match = raw.match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)$/i);
+    if (!match) return raw || fallback;
+
+    const toHex = (part) => Math.max(0, Math.min(255, Math.round(Number(part))))
+      .toString(16)
+      .padStart(2, "0");
+    return `#${toHex(match[1])}${toHex(match[2])}${toHex(match[3])}`;
+  }
+
+  function opacityFromRgba(value) {
+    const match = String(value || "").match(/^rgba\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*,\s*([\d.]+)\s*\)$/i);
+    return match ? Number(match[1]) : 1;
+  }
+
+  function assetDataUri(scene, assetId) {
+    const asset = scene?.assets?.[assetId];
+    if (!asset) return "";
+    if (asset.src && String(asset.src).startsWith("data:")) return asset.src;
+    const base64 = asset.base64 || asset.data || "";
+    if (!base64) return asset.src || "";
+    return `data:${asset.contentType || "image/png"};base64,${base64}`;
+  }
+
+  function svgStyleAttrs(style = {}) {
+    const attrs = [];
+    const fill = style.backgroundColor || style.fill;
+    if (fill && fill !== "transparent" && !String(fill).includes("gradient(")) {
+      attrs.push(`fill="${escapeXml(rgbaToHex(fill, "none"))}"`);
+      const opacity = opacityFromRgba(fill);
+      if (opacity < 1) attrs.push(`fill-opacity="${opacity}"`);
+    } else {
+      attrs.push('fill="none"');
+    }
+
+    if (style.borderColor && Number(style.borderWidth || 0) > 0) {
+      attrs.push(`stroke="${escapeXml(rgbaToHex(style.borderColor, "none"))}"`);
+      attrs.push(`stroke-width="${numberAttr(style.borderWidth, 1)}"`);
+    }
+
+    if (style.opacity !== undefined) attrs.push(`opacity="${numberAttr(style.opacity, 1)}"`);
+    return attrs.join(" ");
+  }
+
+  function textValueForSvg(node) {
+    const style = node.style || {};
+    let value = String(node.text || "");
+    const transform = String(style.textTransform || "").toLowerCase();
+    if (transform === "uppercase") value = value.toUpperCase();
+    if (transform === "lowercase") value = value.toLowerCase();
+    return value;
+  }
+
+  function renderTextToSvg(node, rootRect) {
+    const rect = node.rect || {};
+    const style = node.style || {};
+    const x = numberAttr(rect.x - rootRect.x);
+    const y = numberAttr(rect.y - rootRect.y);
+    const fontSize = numberAttr(style.fontSize, 16);
+    const lineHeight = Number.parseFloat(String(style.lineHeight || "")) || fontSize * 1.2;
+    const color = rgbaToHex(style.color || "rgb(17, 24, 39)", "#111827");
+    const weight = String(style.fontWeight || "400");
+    const family = String(style.fontFamily || "Inter").split(",")[0].replace(/^["']|["']$/g, "");
+    const text = escapeXml(textValueForSvg(node));
+
+    return `<text x="${x}" y="${numberAttr(y + fontSize)}" font-family="${escapeXml(family)}" font-size="${fontSize}" font-weight="${escapeXml(weight)}" fill="${escapeXml(color)}" dominant-baseline="alphabetic">${text}</text>`;
+  }
+
+  function renderImageToSvg(scene, node, rootRect) {
+    const rect = node.rect || {};
+    const href = assetDataUri(scene, node.assetId || node.src || node.style?.backgroundAssetId);
+    if (!href) return "";
+    return `<image x="${numberAttr(rect.x - rootRect.x)}" y="${numberAttr(rect.y - rootRect.y)}" width="${numberAttr(rect.width, 1)}" height="${numberAttr(rect.height, 1)}" href="${escapeXml(href)}" preserveAspectRatio="xMidYMid slice" />`;
+  }
+
+  function renderNodeToSvg(scene, node, rootRect) {
+    if (!node) return "";
+    if (node.kind === "text") return renderTextToSvg(node, rootRect);
+    if (node.kind === "image" || node.kind === "raster") return renderImageToSvg(scene, node, rootRect);
+    if (node.kind === "svg") {
+      const rect = node.rect || {};
+      return `<svg x="${numberAttr(rect.x - rootRect.x)}" y="${numberAttr(rect.y - rootRect.y)}" width="${numberAttr(rect.width, 1)}" height="${numberAttr(rect.height, 1)}">${node.svg || ""}</svg>`;
+    }
+
+    const rect = node.rect || {};
+    const style = node.style || {};
+    const parts = [];
+    const radius = numberAttr(style.borderRadius, 0);
+    if (style.backgroundColor || style.borderColor) {
+      parts.push(
+        `<rect x="${numberAttr(rect.x - rootRect.x)}" y="${numberAttr(rect.y - rootRect.y)}" width="${numberAttr(rect.width, 1)}" height="${numberAttr(rect.height, 1)}" rx="${radius}" ry="${radius}" ${svgStyleAttrs(style)} />`
+      );
+    }
+
+    const backgroundImage = renderImageToSvg(
+      scene,
+      { kind: "image", assetId: style.backgroundAssetId, rect },
+      rootRect
+    );
+    if (backgroundImage) parts.push(backgroundImage);
+    if (!backgroundImage && !style.backgroundColor && !style.borderColor) {
+      parts.push(
+        `<rect x="${numberAttr(rect.x - rootRect.x)}" y="${numberAttr(rect.y - rootRect.y)}" width="${numberAttr(rect.width, 1)}" height="${numberAttr(rect.height, 1)}" rx="${radius}" ry="${radius}" ${svgStyleAttrs(style)} />`
+      );
+    }
+
+    for (const child of node.children || []) {
+      parts.push(renderNodeToSvg(scene, child, rootRect));
+    }
+    return parts.join("");
+  }
+
+  function sceneToSvg(scene) {
+    const rootNode = scene?.root;
+    if (!rootNode || !rootNode.rect) throw new Error("Capture scene is missing a root node.");
+    const rootRect = rootNode.rect;
+    const width = numberAttr(rootRect.width, 1);
+    const height = numberAttr(rootRect.height, 1);
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${renderNodeToSvg(scene, rootNode, rootRect)}</svg>`;
+  }
+
+  async function copyCanvasSvgForFigma(payload) {
+    const svg = sceneToSvg(payload);
+    const html = `<meta charset="utf-8">${svg}`;
+
+    if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/plain": new Blob([svg], { type: "text/plain" }),
+          "text/html": new Blob([html], { type: "text/html" }),
+          "image/svg+xml": new Blob([svg], { type: "image/svg+xml" }),
+        }),
+      ]);
+      return;
+    }
+
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(svg);
+      return;
+    }
+
+    const textarea = document.createElement("textarea");
+    textarea.value = svg;
     textarea.setAttribute("readonly", "");
     Object.assign(textarea.style, {
       position: "fixed",
@@ -444,6 +723,10 @@
   const concurrencyRow = root.querySelector("#figmaConcurrencyRow");
   const captureBtn = root.querySelector("#figmaCaptureBtn");
   const selectBtn = root.querySelector("#figmaSelectBtn");
+  const copyCard = root.querySelector("#figmaCopyCard");
+  const copyBtn = root.querySelector("#figmaCopyBtn");
+  const copyJsonBtn = root.querySelector("#figmaCopyJsonBtn");
+  const copyDescription = root.querySelector("#figmaCopyDescription");
   const status = root.querySelector("#figmaCaptureStatus");
   let pendingCopyPayload = null;
 
@@ -460,10 +743,20 @@
     toggle.disabled = busy;
     concurrency.disabled = busy;
     selectBtn.disabled = busy;
+    copyBtn.disabled = busy || !pendingCopyPayload;
+    copyJsonBtn.disabled = busy || !pendingCopyPayload;
+  }
+
+  function setCopyCard(visible, text) {
+    copyCard.classList.toggle("hidden", !visible);
+    if (text) copyDescription.textContent = text;
+    copyBtn.disabled = !pendingCopyPayload;
+    copyJsonBtn.disabled = !pendingCopyPayload;
   }
 
   function startCapture(selector = "body") {
     pendingCopyPayload = null;
+    setCopyCard(false);
     setBusy(true);
     setStatus(selector === "body" ? "准备开始采集..." : `准备采集：${selector}`);
     chrome.runtime.sendMessage(
@@ -490,19 +783,22 @@
           return;
         }
 
-        copyPayloadForFigma(res.payload)
+        copyCanvasSvgForFigma(res.payload)
           .then(() => {
-            pendingCopyPayload = null;
+            pendingCopyPayload = res.payload;
             const summary = summarizeDiagnostics(res.diagnostics);
+            setCopyCard(true, "Copied as SVG. Go to the Figma canvas and press Ctrl/Cmd+V.");
+            setBusy(false);
             setStatus(
               summary === "已复制转换结果。"
-                ? "已复制转换结果，请回到 Figma 插件导入。"
-                : `已复制转换结果，请回到 Figma 插件导入。${summary}`,
+                ? "已复制为 SVG，请回到 Figma 画布直接粘贴。"
+                : `已复制为 SVG，请回到 Figma 画布直接粘贴。${summary}`,
               "success"
             );
           })
           .catch((error) => {
             pendingCopyPayload = res.payload;
+            setCopyCard(true, "Automatic SVG copy failed. Click Copy to place SVG on your clipboard.");
             captureBtn.textContent = "复制结果";
             setStatus(`采集完成，但自动复制失败：${error.message || error}。请点击“复制结果”。`);
           });
@@ -513,15 +809,31 @@
   function copyPendingPayload() {
     if (!pendingCopyPayload) return false;
     setBusy(true);
-    copyPayloadForFigma(pendingCopyPayload)
+    copyCanvasSvgForFigma(pendingCopyPayload)
       .then(() => {
-        pendingCopyPayload = null;
         setBusy(false);
-        setStatus("已复制转换结果，请回到 Figma 插件导入。", "success");
+        setCopyCard(true, "Copied as SVG. Go to the Figma canvas and press Ctrl/Cmd+V.");
+        setStatus("已复制为 SVG，请回到 Figma 画布直接粘贴。", "success");
       })
       .catch((error) => {
         setBusy(false);
         setStatus(`复制失败：${error.message || error}`, "error");
+      });
+    return true;
+  }
+
+  function copyPendingJsonPayload() {
+    if (!pendingCopyPayload) return false;
+    setBusy(true);
+    copyPayloadForFigma(pendingCopyPayload)
+      .then(() => {
+        setBusy(false);
+        setCopyCard(true, "Copied JSON. Use the Figma plugin import button, not canvas paste.");
+        setStatus("已复制 JSON，请回到 Figma 插件导入。", "success");
+      })
+      .catch((error) => {
+        setBusy(false);
+        setStatus(`复制 JSON 失败：${error.message || error}`, "error");
       });
     return true;
   }
@@ -670,6 +982,14 @@
   captureBtn.addEventListener("click", () => {
     if (copyPendingPayload()) return;
     startCapture("body");
+  });
+
+  copyBtn.addEventListener("click", () => {
+    copyPendingPayload();
+  });
+
+  copyJsonBtn.addEventListener("click", () => {
+    copyPendingJsonPayload();
   });
 
   selectBtn.addEventListener("click", () => {

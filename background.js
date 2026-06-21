@@ -9,6 +9,7 @@ const FIGMA_CAPTURE_PROXY_SESSION_KEY = "figmaCaptureProxyAssetCacheV1";
 const FIGMA_CAPTURE_PROXY_DIAG_KEY = "figmaCaptureProxyDiagnosticsV1";
 const FIGMA_CAPTURE_PROXY_MAX_DIAG = 500;
 const FIGMA_CAPTURE_FETCH_TIMEOUT_MS = 8000;
+const FIGMA_CAPTURE_SCREENSHOT_FALLBACK_LIMIT = 12;
 
 const figmaProxyQueue = [];
 const figmaProxyInFlight = new Map();
@@ -108,7 +109,145 @@ function normalizeCapturePayload(result) {
   return result && typeof result === "object" ? result : null;
 }
 
-async function hydrateSceneAssets(scene) {
+function visitSceneNodes(node, visitor) {
+  if (!node || typeof node !== "object") return;
+  visitor(node);
+  const children = Array.isArray(node.children) ? node.children : [];
+  for (const child of children) visitSceneNodes(child, visitor);
+}
+
+function assetNodeRects(scene) {
+  const rects = {};
+  visitSceneNodes(scene && scene.root, (node) => {
+    if (node.assetId && node.rect) {
+      if (!rects[node.assetId]) rects[node.assetId] = [];
+      rects[node.assetId].push(node.rect);
+    }
+
+    const backgroundAssetId = node.style && node.style.backgroundAssetId;
+    if (backgroundAssetId && node.rect) {
+      if (!rects[backgroundAssetId]) rects[backgroundAssetId] = [];
+      rects[backgroundAssetId].push(node.rect);
+    }
+  });
+  return rects;
+}
+
+async function scrollTabToRect(tabId, rect) {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      world: WORLD,
+      func: (targetRect) =>
+        new Promise((resolve) => {
+          const top = Math.max(0, Number(targetRect.y || 0) - Math.floor(window.innerHeight * 0.25));
+          const left = Math.max(0, Number(targetRect.x || 0) - Math.floor(window.innerWidth * 0.1));
+          window.scrollTo(left, top);
+          requestAnimationFrame(() => setTimeout(resolve, 180));
+        }),
+      args: [rect],
+    });
+  } catch {
+    // Screenshot fallback is best-effort only.
+  }
+}
+
+async function readTabViewportMetrics(tabId) {
+  try {
+    const [{ result }] = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: WORLD,
+      func: () => ({
+        scrollX: window.scrollX || 0,
+        scrollY: window.scrollY || 0,
+        innerWidth: window.innerWidth || 0,
+        innerHeight: window.innerHeight || 0,
+        devicePixelRatio: window.devicePixelRatio || 1,
+      }),
+    });
+    return result || null;
+  } catch {
+    return null;
+  }
+}
+
+async function cropCapturedDataUrl(dataUrl, rect, metrics) {
+  if (typeof createImageBitmap !== "function" || typeof OffscreenCanvas !== "function") {
+    return null;
+  }
+
+  const response = await fetch(dataUrl);
+  const bitmap = await createImageBitmap(await response.blob());
+  const dpr = Number(metrics.devicePixelRatio) || 1;
+  const sx = Math.max(0, Math.round((Number(rect.x) - Number(metrics.scrollX || 0)) * dpr));
+  const sy = Math.max(0, Math.round((Number(rect.y) - Number(metrics.scrollY || 0)) * dpr));
+  const sw = Math.min(bitmap.width - sx, Math.round(Number(rect.width || 1) * dpr));
+  const sh = Math.min(bitmap.height - sy, Math.round(Number(rect.height || 1) * dpr));
+
+  if (sw <= 0 || sh <= 0) return null;
+
+  const canvas = new OffscreenCanvas(sw, sh);
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+
+  context.drawImage(bitmap, sx, sy, sw, sh, 0, 0, sw, sh);
+  const blob = await canvas.convertToBlob({ type: "image/png" });
+  return {
+    contentType: "image/png",
+    base64: toBase64(await blob.arrayBuffer()),
+  };
+}
+
+async function hydrateFailedAssetsFromScreenshots(scene, tab) {
+  const tabId = tab && tab.id;
+  if (!tabId || !chrome.tabs.captureVisibleTab) return;
+  if (typeof createImageBitmap !== "function" || typeof OffscreenCanvas !== "function") return;
+
+  const assets = scene && typeof scene.assets === "object" ? scene.assets : null;
+  if (!assets) return;
+
+  const rectsByAssetId = assetNodeRects(scene);
+  const failedAssetIds = Object.entries(assets)
+    .filter(([, asset]) => asset && asset.error && !asset.base64 && !asset.data)
+    .map(([assetId]) => assetId)
+    .slice(0, FIGMA_CAPTURE_SCREENSHOT_FALLBACK_LIMIT);
+
+  for (const assetId of failedAssetIds) {
+    const rect = (rectsByAssetId[assetId] || [])[0];
+    if (!rect) continue;
+
+    try {
+      await scrollTabToRect(tabId, rect);
+      const metrics = await readTabViewportMetrics(tabId);
+      if (!metrics) continue;
+
+      const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
+      const cropped = await cropCapturedDataUrl(dataUrl, rect, metrics);
+      if (!cropped) continue;
+
+      assets[assetId].base64 = cropped.base64;
+      assets[assetId].contentType = cropped.contentType;
+      assets[assetId].fallback = "visible-tab-screenshot";
+      delete assets[assetId].error;
+      pushDiag({
+        url: assets[assetId].src || assetId,
+        phase: "screenshot-fallback",
+        ok: true,
+        status: 200,
+      });
+    } catch (error) {
+      pushDiag({
+        url: assets[assetId].src || assetId,
+        phase: "screenshot-fallback",
+        ok: false,
+        status: 0,
+        error: String(error),
+      });
+    }
+  }
+}
+
+async function hydrateSceneAssets(scene, tab) {
   const assets = scene && typeof scene.assets === "object" ? scene.assets : null;
   if (!assets) return scene;
 
@@ -125,6 +264,7 @@ async function hydrateSceneAssets(scene) {
       }
     })
   );
+  await hydrateFailedAssetsFromScreenshots(scene, tab);
 
   return scene;
 }
@@ -374,7 +514,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       }
 
       const { result, diagnostics } = await runCapture(tab.id, msg.options || {});
-      const payload = await hydrateSceneAssets(normalizeCapturePayload(result));
+      const payload = await hydrateSceneAssets(normalizeCapturePayload(result), tab);
       if (!payload) {
         throw new Error("Capture returned empty result");
       }

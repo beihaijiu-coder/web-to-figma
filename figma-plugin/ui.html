@@ -179,6 +179,12 @@
       color: #8b93a3;
     }
 
+    .capture-input {
+      min-height: 104px;
+      resize: vertical;
+      line-height: 1.4;
+    }
+
     .actions {
       display: grid;
       gap: 10px;
@@ -313,6 +319,7 @@
       </select>
       <input id="fallbackFont" class="field" placeholder="Fallback font, e.g. Inter" value="Inter" />
       <button id="importClipboardBtn" class="primary" type="button">Import clipboard capture</button>
+      <textarea id="manualCaptureInput" class="field capture-input hidden" placeholder="Paste Chrome capture JSON here"></textarea>
       <input id="urlInput" class="field" placeholder="Or enter URL to open in Chrome" />
       <button id="openUrlBtn" class="secondary" type="button">Open URL in Chrome</button>
     </section>
@@ -347,6 +354,7 @@
     const layoutMode = document.getElementById("layoutMode");
     const fallbackFont = document.getElementById("fallbackFont");
     const urlInput = document.getElementById("urlInput");
+    const manualCaptureInput = document.getElementById("manualCaptureInput");
     let lastPayload = null;
 
     function fallbackFontName() {
@@ -380,6 +388,15 @@
     }
 
     function parseClipboardCapture(text) {
+      const trimmed = String(text || "").trim();
+      if (/^<svg[\s>]/i.test(trimmed)) {
+        throw new Error("Clipboard contains SVG. Paste it directly on the Figma canvas, or use Copy JSON for plugin import.");
+      }
+
+      if (/^</.test(trimmed)) {
+        throw new Error("Clipboard contains markup, not a Web to Figma capture JSON. Use Copy JSON for plugin import.");
+      }
+
       const parsed = JSON.parse(text);
       if (parsed?.source === "web-to-figma" && parsed?.type === "capture-scene") {
         return parsed.payload;
@@ -403,15 +420,86 @@
       );
     }
 
-    document.getElementById("importClipboardBtn").onclick = async () => {
+    function showManualPaste(messageText) {
+      manualCaptureInput.classList.remove("hidden");
+      manualCaptureInput.focus();
+      title.textContent = "Paste capture";
+      subtitle.textContent = messageText || "Paste the Chrome capture JSON here.";
+    }
+
+    function tryImportManualCapture() {
+      const text = manualCaptureInput.value.trim();
+      if (!text) return false;
+
       try {
-        const text = await navigator.clipboard.readText();
         importPayload(parseClipboardCapture(text));
+        manualCaptureInput.value = "";
+        manualCaptureInput.classList.add("hidden");
+        return true;
       } catch (error) {
+        title.textContent = "Import failed";
+        subtitle.textContent = error.message || String(error);
+        return false;
+      }
+    }
+
+    function tryImportCaptureText(text) {
+      const trimmed = String(text || "").trim();
+      if (!trimmed) return false;
+
+      try {
+        importPayload(parseClipboardCapture(trimmed));
+        manualCaptureInput.value = "";
+        manualCaptureInput.classList.add("hidden");
+        return true;
+      } catch (error) {
+        title.textContent = "Import failed";
+        subtitle.textContent = error.message || String(error);
+        return false;
+      }
+    }
+
+    async function readClipboardText() {
+      if (!navigator.clipboard || typeof navigator.clipboard.readText !== "function") {
+        throw new Error("Figma cannot read the clipboard directly.");
+      }
+
+      return navigator.clipboard.readText();
+    }
+
+    document.getElementById("importClipboardBtn").onclick = async () => {
+      if (tryImportManualCapture()) return;
+
+      try {
+        const text = await readClipboardText();
+        tryImportCaptureText(text);
+      } catch (error) {
+        if (!navigator.clipboard || typeof navigator.clipboard.readText !== "function") {
+          showManualPaste("Figma cannot read the clipboard directly. Paste the capture JSON here.");
+          return;
+        }
+
         title.textContent = "Import failed";
         subtitle.textContent = error.message || String(error);
       }
     };
+
+    manualCaptureInput.addEventListener("paste", () => {
+      setTimeout(() => {
+        tryImportManualCapture();
+      }, 0);
+    });
+
+    window.addEventListener("paste", (event) => {
+      if (!startPanel || startPanel.classList.contains("hidden")) return;
+
+      const text = event.clipboardData && event.clipboardData.getData("text/plain");
+      if (!text) return;
+
+      if (tryImportCaptureText(text)) {
+        event.preventDefault();
+      }
+    });
 
     document.getElementById("openUrlBtn").onclick = async () => {
       try {
@@ -462,7 +550,7 @@
       }
 
       if (msg.type === "import-cancelled") {
-        showStart("Cancelled. Partial layers were removed.");
+        showStart("Cancelled. Partial layers were kept in Figma.");
       }
 
       if (msg.type === "import-failed") {

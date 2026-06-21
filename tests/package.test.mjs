@@ -5,6 +5,7 @@ import test from "node:test";
 test("Chrome extension is packaged for clipboard handoff instead of JSON downloads", () => {
   const manifest = JSON.parse(fs.readFileSync(new URL("../manifest.json", import.meta.url), "utf8"));
   const background = fs.readFileSync(new URL("../background.js", import.meta.url), "utf8");
+  const toolbar = fs.readFileSync(new URL("../inpage-toolbar.js", import.meta.url), "utf8");
 
   assert.equal(manifest.permissions.includes("downloads"), false);
   assert.equal(manifest.permissions.includes("clipboardWrite"), true);
@@ -14,6 +15,15 @@ test("Chrome extension is packaged for clipboard handoff instead of JSON downloa
   );
   assert.equal(background.includes("chrome.downloads.download"), false);
   assert.equal(background.includes("payload"), true);
+  assert.equal(background.includes("captureVisibleTab"), true);
+  assert.equal(background.includes("screenshot-fallback"), true);
+  assert.equal(toolbar.includes("Copy to clipboard"), true);
+  assert.equal(toolbar.includes("figmaCopyBtn"), true);
+  assert.equal(toolbar.includes("figmaCopyJsonBtn"), true);
+  assert.equal(toolbar.includes("sceneToSvg"), true);
+  assert.equal(toolbar.includes("copyCanvasSvgForFigma"), true);
+  assert.equal(toolbar.includes("image/svg+xml"), true);
+  assert.equal(toolbar.includes("copyPayloadForFigma(pendingCopyPayload)"), true);
 });
 
 test("Figma plugin UI stays focused on import progress without commercial/report panels", () => {
@@ -27,6 +37,10 @@ test("Figma plugin UI stays focused on import progress without commercial/report
   assert.equal(manifest.main, "importer.js");
   assert.equal(manifest.ui, "ui.html");
   assert.equal(ui.includes("Import clipboard capture"), true);
+  assert.equal(ui.includes("manualCaptureInput"), true);
+  assert.equal(ui.includes("Figma cannot read the clipboard directly"), true);
+  assert.equal(ui.includes('window.addEventListener("paste"'), true);
+  assert.equal(ui.includes("tryImportCaptureText"), true);
   assert.equal(ui.includes("Open URL in Chrome"), true);
   assert.equal(ui.includes("Cancel"), true);
   for (const word of forbidden) {
