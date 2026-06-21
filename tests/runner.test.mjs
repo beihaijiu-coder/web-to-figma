@@ -17,12 +17,16 @@ function createRunnerContext({
   captureResult,
   sceneCaptureResult,
   captureOptions,
+  contentFlowState,
+  stopScrollAtY,
 } = {}) {
   const scrolls = [];
   const captureCalls = [];
   const progressEvents = [];
   const eventHandlers = new Map();
   let timerCount = 0;
+  let scrollX = 0;
+  let scrollY = 0;
 
   const documentElement = {};
   Object.defineProperty(documentElement, "scrollHeight", {
@@ -53,6 +57,12 @@ function createRunnerContext({
   const window = {
     document,
     innerHeight,
+    get scrollX() {
+      return scrollX;
+    },
+    get scrollY() {
+      return scrollY;
+    },
     location: { href: "https://example.com/page" },
     __FIGMA_CAPTURE_OPTIONS__: captureOptions,
     addEventListener(type, handler) {
@@ -70,7 +80,12 @@ function createRunnerContext({
       return element.computedStyle || element.style || {};
     },
     scrollTo(x, y) {
+      scrollX = Number(x) || 0;
+      scrollY = Number(y) || 0;
       scrolls.push({ x, y });
+      if (Number.isFinite(stopScrollAtY) && scrollY >= stopScrollAtY) {
+        window.__FIGMA_CAPTURE_STOP_SCROLL_REQUESTED__ = true;
+      }
     },
     figma: {
       async captureForDesign(options) {
@@ -79,6 +94,10 @@ function createRunnerContext({
       },
     },
   };
+
+  if (contentFlowState) {
+    window.__FIGMA_CAPTURE_CONTENT_FLOW_STATE__ = contentFlowState;
+  }
 
   if (sceneCaptureResult) {
     window.webToFigmaCaptureScene = async (selector, options) => {
@@ -167,6 +186,10 @@ function createFakeElement({ backgroundImage = "" } = {}) {
   };
 }
 
+function plain(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 test("runner scrolls through the full document before capturing", async () => {
   const { scrolls, captureCalls, result } = await runRunner({
     bodyScrollHeight: 800,
@@ -200,6 +223,142 @@ test("runner still captures when the page keeps growing during preparation", asy
   assert.equal(captureCalls.length, 1);
   assert.ok(scrolls.length <= 60, "expected scrolling to stay bounded");
   assert.deepEqual(scrolls.at(-1), { x: 0, y: 0 });
+});
+
+test("runner turns non-settling full pages into a bounded content-flow segment", async () => {
+  let height = 2600;
+  const { result, progressEvents } = await runRunner({
+    documentScrollHeight: () => {
+      height += 1000;
+      return height;
+    },
+    innerHeight: 1000,
+    sceneCaptureResult: () => ({
+      version: 1,
+      root: {
+        kind: "frame",
+        name: "Body",
+        rect: { x: 0, y: 0, width: 800, height: 50000 },
+        children: [
+          {
+            kind: "frame",
+            name: "Header",
+            rect: { x: 0, y: 0, width: 800, height: 80 },
+            style: { position: "fixed" },
+          },
+          {
+            kind: "frame",
+            name: "First feed card",
+            rect: { x: 24, y: 200, width: 320, height: 240 },
+          },
+          {
+            kind: "frame",
+            name: "Future feed card",
+            rect: { x: 24, y: 6500, width: 320, height: 240 },
+          },
+        ],
+      },
+    }),
+  });
+
+  assert.equal(result.capture.contentFlow.isSegment, true);
+  assert.equal(result.capture.contentFlow.segmentIndex, 1);
+  assert.equal(result.capture.contentFlow.hasMore, true);
+  assert.deepEqual(plain(result.root.rect), { x: 0, y: 0, width: 800, height: 5000 });
+  assert.deepEqual(
+    plain(result.root.children.map((node) => node.name)),
+    ["Header", "First feed card"]
+  );
+  assert.ok(progressEvents.some((event) => event.stage === "continuous-content"));
+});
+
+test("runner stops scrolling on user request and captures the loaded range", async () => {
+  const { context, result, progressEvents } = await runRunner({
+    documentScrollHeight: 8000,
+    innerHeight: 1000,
+    stopScrollAtY: 800,
+    sceneCaptureResult: () => ({
+      version: 1,
+      root: {
+        kind: "frame",
+        name: "Body",
+        rect: { x: 0, y: 0, width: 800, height: 8000 },
+        children: [
+          {
+            kind: "frame",
+            name: "Visible card",
+            rect: { x: 24, y: 1200, width: 320, height: 240 },
+          },
+          {
+            kind: "frame",
+            name: "Below stop card",
+            rect: { x: 24, y: 2200, width: 320, height: 240 },
+          },
+        ],
+      },
+    }),
+  });
+
+  assert.equal(result.capture.contentFlow.reason, "user-stopped");
+  assert.equal(result.capture.contentFlow.stoppedByUser, true);
+  assert.equal(result.capture.contentFlow.hasMore, false);
+  assert.deepEqual(plain(result.root.rect), { x: 0, y: 0, width: 800, height: 1800 });
+  assert.deepEqual(
+    plain(result.root.children.map((node) => node.name)),
+    ["Visible card"]
+  );
+  assert.equal(context.window.__FIGMA_CAPTURE_CONTENT_FLOW_STATE__, undefined);
+  assert.ok(progressEvents.some((event) => event.stage === "scroll-stopped"));
+});
+
+test("runner captures the next saved content-flow segment", async () => {
+  const { result } = await runRunner({
+    documentScrollHeight: 20000,
+    innerHeight: 1000,
+    captureOptions: { contentFlow: { action: "next" } },
+    contentFlowState: {
+      url: "https://example.com/page",
+      loadedUntil: 10000,
+      nextSegmentStart: 5000,
+      nextSegmentIndex: 2,
+    },
+    sceneCaptureResult: () => ({
+      version: 1,
+      root: {
+        kind: "frame",
+        name: "Body",
+        rect: { x: 0, y: 0, width: 800, height: 20000 },
+        children: [
+          {
+            kind: "frame",
+            name: "Header",
+            rect: { x: 0, y: 0, width: 800, height: 80 },
+            style: { position: "fixed" },
+          },
+          {
+            kind: "frame",
+            name: "First segment card",
+            rect: { x: 24, y: 400, width: 320, height: 240 },
+          },
+          {
+            kind: "frame",
+            name: "Second segment card",
+            rect: { x: 24, y: 5200, width: 320, height: 240 },
+          },
+        ],
+      },
+    }),
+  });
+
+  assert.equal(result.capture.contentFlow.segmentIndex, 2);
+  assert.deepEqual(plain(result.root.rect), { x: 0, y: 5000, width: 800, height: 5000 });
+  assert.deepEqual(
+    plain(result.root.children.map((node) => [node.name, node.rect.y])),
+    [
+      ["Header", 5000],
+      ["Second segment card", 5200],
+    ]
+  );
 });
 
 test("HD mode promotes responsive images before capturing", async () => {

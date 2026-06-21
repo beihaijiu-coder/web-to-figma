@@ -553,6 +553,46 @@ test("visually hidden accessibility text is ignored during visual capture", asyn
   assert.equal(JSON.stringify(scene.root).includes("Store"), false);
 });
 
+test("external svg sprite uses are captured as reusable scene assets", async () => {
+  const spriteUse = {
+    getAttribute(name) {
+      if (name === "href") return "/cdn/icons.svg#new-chat";
+      return "";
+    },
+  };
+  const icon = createElement("svg", { x: 16, y: 24, width: 20, height: 20 }, {
+    childNodes: [],
+  });
+  icon.outerHTML =
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\"><use href=\"/cdn/icons.svg#new-chat\" fill=\"currentColor\"></use></svg>";
+  icon.querySelectorAll = (selector) => (selector === "use" ? [spriteUse] : []);
+  icon.computedStyle = {
+    display: "block",
+    color: "rgb(13, 13, 13)",
+    backgroundColor: "rgba(0, 0, 0, 0)",
+  };
+  const root = createElement("button", { x: 0, y: 0, width: 56, height: 56 }, {
+    id: "icon-button",
+    childNodes: [icon],
+  });
+  root.computedStyle = {
+    display: "flex",
+    backgroundColor: "rgba(0, 0, 0, 0)",
+    color: "rgb(13, 13, 13)",
+  };
+
+  const scene = await runSceneCapture({ root, selector: "#icon-button" });
+  const svgNode = scene.root.children[0];
+  const spriteAsset = scene.assets[svgNode.svgUses[0].assetId];
+
+  assert.equal(svgNode.kind, "svg");
+  assert.equal(svgNode.svgUses[0].symbolId, "new-chat");
+  assert.equal(spriteAsset.src, "https://example.com/cdn/icons.svg");
+  assert.equal(spriteAsset.type, "svg");
+  assert.equal(spriteAsset.source, "svg-sprite");
+  assert.deepEqual(Array.from(spriteAsset.symbolIds), ["new-chat"]);
+});
+
 test("inline prose with links is captured as one paragraph text node", async () => {
   const code = createElement("code", { x: 524, y: 239, width: 187, height: 19 }, {
     childNodes: [createText("Mapping missing fonts", { x: 529, y: 240, width: 177, height: 17 })],
@@ -668,6 +708,7 @@ test("text capture keeps typography metrics that prevent Figma clipping", async 
     fontFamily: "Inter",
     fontSize: "72px",
     fontWeight: "800",
+    fontStyle: "italic",
     lineHeight: "68.4px",
     letterSpacing: "-4.32px",
     whiteSpace: "normal",
@@ -679,6 +720,8 @@ test("text capture keeps typography metrics that prevent Figma clipping", async 
   assert.equal(text.style.lineHeight, "68.4px");
   assert.equal(text.style.letterSpacing, "-4.32px");
   assert.equal(text.style.whiteSpace, "normal");
+  assert.equal(text.style.fontStyle, "italic");
+  assert.equal(text.design.text.fontStyle, "italic");
   assert.equal(text.rect.width, 520);
 });
 

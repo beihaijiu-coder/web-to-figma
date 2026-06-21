@@ -317,6 +317,11 @@
         <option value="visual">Visual fidelity first</option>
         <option value="editable">Editable layout first</option>
       </select>
+      <select id="overflowMode" class="select" aria-label="Overflow content handling">
+        <option value="preserve">1. 网页还原（按网页裁剪）</option>
+        <option value="sidecar" selected>2. 网页 + 完整内容（推荐）</option>
+        <option value="show">3. 展开全部已采集内容</option>
+      </select>
       <input id="fallbackFont" class="field" placeholder="Fallback font, e.g. Inter" value="Inter" />
       <button id="importClipboardBtn" class="primary" type="button">Import clipboard capture</button>
       <textarea id="manualCaptureInput" class="field capture-input hidden" placeholder="Paste Chrome capture JSON here"></textarea>
@@ -352,6 +357,7 @@
     const retryBtn = document.getElementById("retryBtn");
     const cancelBtn = document.getElementById("cancelBtn");
     const layoutMode = document.getElementById("layoutMode");
+    const overflowMode = document.getElementById("overflowMode");
     const fallbackFont = document.getElementById("fallbackFont");
     const urlInput = document.getElementById("urlInput");
     const manualCaptureInput = document.getElementById("manualCaptureInput");
@@ -413,6 +419,7 @@
             type: "import-capture",
             payload,
             layoutMode: layoutMode.value,
+            overflowMode: overflowMode.value,
             fallbackFont: fallbackFontName(),
           },
         },

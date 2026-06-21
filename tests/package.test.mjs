@@ -17,9 +17,16 @@ test("Chrome extension is packaged for clipboard handoff instead of JSON downloa
   assert.equal(background.includes("payload"), true);
   assert.equal(background.includes("captureVisibleTab"), true);
   assert.equal(background.includes("screenshot-fallback"), true);
+  assert.equal(background.includes("data-figma-capture-ignore"), true);
   assert.equal(toolbar.includes("Copy to clipboard"), true);
   assert.equal(toolbar.includes("figmaCopyBtn"), true);
   assert.equal(toolbar.includes("figmaCopyJsonBtn"), true);
+  assert.equal(toolbar.includes("figmaStopScrollBtn"), true);
+  assert.equal(toolbar.includes("停止滚动并生成"), true);
+  assert.equal(toolbar.includes("__FIGMA_CAPTURE_STOP_SCROLL_REQUESTED__"), true);
+  assert.equal(toolbar.includes("figmaContinueFlowBtn"), true);
+  assert.equal(toolbar.includes("scroll-stopped"), true);
+  assert.equal(toolbar.includes("continuous-content"), true);
   assert.equal(toolbar.includes("sceneToSvg"), true);
   assert.equal(toolbar.includes("copyCanvasSvgForFigma"), true);
   assert.equal(toolbar.includes("image/svg+xml"), true);
@@ -43,6 +50,11 @@ test("Figma plugin UI stays focused on import progress without commercial/report
   assert.equal(ui.includes("tryImportCaptureText"), true);
   assert.equal(ui.includes("Open URL in Chrome"), true);
   assert.equal(ui.includes("Cancel"), true);
+  assert.equal((ui.match(/id="fallbackFont"/g) || []).length, 1);
+  assert.equal((ui.match(/id="overflowMode"/g) || []).length, 1);
+  assert.equal(ui.includes('value="preserve"'), true);
+  assert.equal(ui.includes('value="sidecar"'), true);
+  assert.equal(ui.includes('value="show"'), true);
   for (const word of forbidden) {
     const pattern = new RegExp(`\\b${word.replace(/\s+/g, "\\s+")}\\b`, "i");
     assert.equal(pattern.test(ui), false, `UI should not contain ${word}`);

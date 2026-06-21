@@ -383,6 +383,7 @@
       fontFamily: style.fontFamily,
       fontSize: round(style.fontSize, 16),
       fontWeight: style.fontWeight,
+      fontStyle: style.fontStyle || "normal",
       lineHeight: style.lineHeight,
       letterSpacing: style.letterSpacing,
       color: designColor(style.color),
@@ -477,6 +478,7 @@
       fontFamily: computed.fontFamily,
       fontSize: px(computed.fontSize, 16),
       fontWeight: computed.fontWeight,
+      fontStyle: computed.fontStyle,
       lineHeight: computed.lineHeight,
       letterSpacing: computed.letterSpacing,
       whiteSpace: computed.whiteSpace,
@@ -641,6 +643,71 @@
     return String(url || "").startsWith("data:")
       ? assetFromDataUrl(url, assets, extra)
       : assetIdFor(url, assets, extra);
+  }
+
+  function absoluteUrl(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+
+    try {
+      return new URL(raw, window.location.href).href;
+    } catch {
+      return raw;
+    }
+  }
+
+  function splitSvgUseReference(rawHref) {
+    const raw = String(rawHref || "").trim();
+    if (!raw) return null;
+
+    const hashIndex = raw.lastIndexOf("#");
+    if (hashIndex < 0 || hashIndex === raw.length - 1) return null;
+
+    const symbolId = raw.slice(hashIndex + 1);
+    const urlPart = raw.slice(0, hashIndex);
+    if (!urlPart) return null;
+
+    return {
+      rawHref: raw,
+      symbolId,
+      url: absoluteUrl(urlPart),
+    };
+  }
+
+  function svgUseReferences(element, assets) {
+    if (!element || typeof element.querySelectorAll !== "function") return [];
+
+    const references = [];
+    const uses = Array.from(element.querySelectorAll("use") || []);
+    for (const use of uses) {
+      const rawHref =
+        use.getAttribute?.("href") ||
+        use.getAttribute?.("xlink:href") ||
+        use.getAttribute?.("xmlns:xlink:href") ||
+        "";
+      const reference = splitSvgUseReference(rawHref);
+      if (!reference || !reference.url || !reference.symbolId) continue;
+
+      const assetId = assetForUrl(reference.url, assets, {
+        source: "svg-sprite",
+        type: "svg",
+        contentType: "image/svg+xml",
+      });
+      const asset = assets && assets[assetId];
+      if (asset) {
+        asset.symbolIds = Array.isArray(asset.symbolIds) ? asset.symbolIds : [];
+        if (!asset.symbolIds.includes(reference.symbolId)) asset.symbolIds.push(reference.symbolId);
+      }
+
+      references.push({
+        assetId,
+        rawHref: reference.rawHref,
+        url: reference.url,
+        symbolId: reference.symbolId,
+      });
+    }
+
+    return references;
   }
 
   function screenshotAssetForNode(element, assets, reason) {
@@ -1008,11 +1075,13 @@
     });
   }
 
-  function captureSvg(element, rootRect) {
+  function captureSvg(element, rootRect, assets) {
     const rect = rectFor(element, rootRect);
+    const svgUses = svgUseReferences(element, assets);
     return buildNode("svg", rect, {
       name: element.getAttribute?.("aria-label") || elementName(element),
       svg: element.outerHTML || "<svg />",
+      svgUses,
       style: captureStyle(element, {}),
       source: sourceForElement(element),
     });
@@ -1030,7 +1099,7 @@
     if (isVisuallyHiddenElement(node, rect)) return null;
     if (isSkipLinkElement(node, rect)) return null;
     if (tag === "img") return captureImage(node, rootRect, assets);
-    if (tag === "svg") return captureSvg(node, rootRect);
+    if (tag === "svg") return captureSvg(node, rootRect, assets);
     if (tag === "canvas" || tag === "video" || tag === "iframe") {
       const poster = tag === "video" ? String(node.poster || "").trim() : "";
       const rasterAssetId = tag === "canvas" && typeof node.toDataURL === "function"

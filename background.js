@@ -1,3 +1,7 @@
+import { normalizeSceneAssetsForFigma } from "./asset-normalizer.mjs";
+import { normalizeFixedShellOverlaps } from "./app-shell-normalizer.mjs";
+import { visibleCaptureBounds } from "./screenshot-geometry.mjs";
+
 const WORLD = "ISOLATED";
 const CAPTURE_FILE = "scene-capture.js";
 const RUNNER_FILE = "runner.js";
@@ -116,21 +120,34 @@ function visitSceneNodes(node, visitor) {
   for (const child of children) visitSceneNodes(child, visitor);
 }
 
-function assetNodeRects(scene) {
-  const rects = {};
+function assetNodeReferences(scene) {
+  const references = {};
   visitSceneNodes(scene && scene.root, (node) => {
     if (node.assetId && node.rect) {
-      if (!rects[node.assetId]) rects[node.assetId] = [];
-      rects[node.assetId].push(node.rect);
+      if (!references[node.assetId]) references[node.assetId] = [];
+      references[node.assetId].push({ node, rect: node.rect, role: "node" });
     }
 
     const backgroundAssetId = node.style && node.style.backgroundAssetId;
     if (backgroundAssetId && node.rect) {
-      if (!rects[backgroundAssetId]) rects[backgroundAssetId] = [];
-      rects[backgroundAssetId].push(node.rect);
+      if (!references[backgroundAssetId]) references[backgroundAssetId] = [];
+      references[backgroundAssetId].push({ node, rect: node.rect, role: "background" });
     }
   });
-  return rects;
+  return references;
+}
+
+function replaceCapturedRasterBounds(reference, rect) {
+  if (!reference || reference.role !== "node" || reference.node?.kind !== "raster" || !rect) return;
+  const bounds = {
+    x: Number(rect.x),
+    y: Number(rect.y),
+    width: Number(rect.width),
+    height: Number(rect.height),
+  };
+  reference.node.rect = bounds;
+  if (reference.node.absoluteRect) reference.node.absoluteRect = { ...bounds };
+  if (reference.node.design?.absoluteRect) reference.node.design.absoluteRect = { ...bounds };
 }
 
 async function scrollTabToRect(tabId, rect) {
@@ -171,6 +188,45 @@ async function readTabViewportMetrics(tabId) {
   }
 }
 
+async function setIgnoredCaptureUiHidden(tabId, hidden) {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      world: WORLD,
+      func: (shouldHide) => {
+        const property = "__figmaCaptureScreenshotStyle";
+        for (const element of Array.from(document.querySelectorAll("[data-figma-capture-ignore='1']"))) {
+          if (!element.style) continue;
+
+          if (shouldHide) {
+            if (!element[property]) {
+              element[property] = {
+                display: element.style.display,
+                visibility: element.style.visibility,
+                pointerEvents: element.style.pointerEvents,
+              };
+            }
+            element.style.display = "none";
+            element.style.visibility = "hidden";
+            element.style.pointerEvents = "none";
+            continue;
+          }
+
+          const original = element[property];
+          if (!original) continue;
+          element.style.display = original.display;
+          element.style.visibility = original.visibility;
+          element.style.pointerEvents = original.pointerEvents;
+          delete element[property];
+        }
+      },
+      args: [Boolean(hidden)],
+    });
+  } catch {
+    // The fallback stays best-effort when the page cannot be scripted.
+  }
+}
+
 async function cropCapturedDataUrl(dataUrl, rect, metrics) {
   if (typeof createImageBitmap !== "function" || typeof OffscreenCanvas !== "function") {
     return null;
@@ -179,10 +235,18 @@ async function cropCapturedDataUrl(dataUrl, rect, metrics) {
   const response = await fetch(dataUrl);
   const bitmap = await createImageBitmap(await response.blob());
   const dpr = Number(metrics.devicePixelRatio) || 1;
-  const sx = Math.max(0, Math.round((Number(rect.x) - Number(metrics.scrollX || 0)) * dpr));
-  const sy = Math.max(0, Math.round((Number(rect.y) - Number(metrics.scrollY || 0)) * dpr));
-  const sw = Math.min(bitmap.width - sx, Math.round(Number(rect.width || 1) * dpr));
-  const sh = Math.min(bitmap.height - sy, Math.round(Number(rect.height || 1) * dpr));
+  const captureBounds = visibleCaptureBounds(rect, {
+    scrollX: metrics.scrollX,
+    scrollY: metrics.scrollY,
+    innerWidth: Math.min(Number(metrics.innerWidth || 0), bitmap.width / dpr),
+    innerHeight: Math.min(Number(metrics.innerHeight || 0), bitmap.height / dpr),
+  });
+  if (!captureBounds) return null;
+
+  const sx = Math.max(0, Math.round((captureBounds.x - Number(metrics.scrollX || 0)) * dpr));
+  const sy = Math.max(0, Math.round((captureBounds.y - Number(metrics.scrollY || 0)) * dpr));
+  const sw = Math.min(bitmap.width - sx, Math.round(captureBounds.width * dpr));
+  const sh = Math.min(bitmap.height - sy, Math.round(captureBounds.height * dpr));
 
   if (sw <= 0 || sh <= 0) return null;
 
@@ -195,6 +259,12 @@ async function cropCapturedDataUrl(dataUrl, rect, metrics) {
   return {
     contentType: "image/png",
     base64: toBase64(await blob.arrayBuffer()),
+    rect: {
+      x: captureBounds.x,
+      y: captureBounds.y,
+      width: sw / dpr,
+      height: sh / dpr,
+    },
   };
 }
 
@@ -206,17 +276,21 @@ async function hydrateFailedAssetsFromScreenshots(scene, tab) {
   const assets = scene && typeof scene.assets === "object" ? scene.assets : null;
   if (!assets) return;
 
-  const rectsByAssetId = assetNodeRects(scene);
+  const referencesByAssetId = assetNodeReferences(scene);
   const failedAssetIds = Object.entries(assets)
     .filter(([, asset]) => asset && asset.error && !asset.base64 && !asset.data)
     .map(([assetId]) => assetId)
     .slice(0, FIGMA_CAPTURE_SCREENSHOT_FALLBACK_LIMIT);
 
   for (const assetId of failedAssetIds) {
-    const rect = (rectsByAssetId[assetId] || [])[0];
+    const reference = (referencesByAssetId[assetId] || [])[0];
+    const rect = reference && reference.rect;
     if (!rect) continue;
 
+    let ignoredUiHidden = false;
     try {
+      await setIgnoredCaptureUiHidden(tabId, true);
+      ignoredUiHidden = true;
       await scrollTabToRect(tabId, rect);
       const metrics = await readTabViewportMetrics(tabId);
       if (!metrics) continue;
@@ -228,6 +302,8 @@ async function hydrateFailedAssetsFromScreenshots(scene, tab) {
       assets[assetId].base64 = cropped.base64;
       assets[assetId].contentType = cropped.contentType;
       assets[assetId].fallback = "visible-tab-screenshot";
+      assets[assetId].captureRect = cropped.rect;
+      replaceCapturedRasterBounds(reference, cropped.rect);
       delete assets[assetId].error;
       pushDiag({
         url: assets[assetId].src || assetId,
@@ -243,6 +319,8 @@ async function hydrateFailedAssetsFromScreenshots(scene, tab) {
         status: 0,
         error: String(error),
       });
+    } finally {
+      if (ignoredUiHidden) await setIgnoredCaptureUiHidden(tabId, false);
     }
   }
 }
@@ -265,6 +343,15 @@ async function hydrateSceneAssets(scene, tab) {
     })
   );
   await hydrateFailedAssetsFromScreenshots(scene, tab);
+  normalizeFixedShellOverlaps(scene);
+  await normalizeSceneAssetsForFigma(scene, {
+    onDiagnostic(entry) {
+      pushDiag({
+        ...entry,
+        url: entry.src || entry.assetId || "embedded-image",
+      });
+    },
+  });
 
   return scene;
 }

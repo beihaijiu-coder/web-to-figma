@@ -5,7 +5,13 @@ import test from "node:test";
 const require = createRequire(import.meta.url);
 const { importSceneToFigma } = require("../figma-plugin/importer.js");
 
-function createFakeFigma({ unavailableFonts = [], failImages = false, defaultFrameClipsContent = false, strictClipsContent = false } = {}) {
+function createFakeFigma({
+  unavailableFonts = [],
+  availableFonts = null,
+  failImages = false,
+  defaultFrameClipsContent = false,
+  strictClipsContent = false,
+} = {}) {
   const nodes = [];
   const pageChildren = [];
   const focusedNodes = [];
@@ -69,6 +75,14 @@ function createFakeFigma({ unavailableFonts = [], failImages = false, defaultFra
     },
     async loadFontAsync(fontName) {
       const key = `${fontName.family}/${fontName.style}`;
+      if (
+        Array.isArray(availableFonts) &&
+        !availableFonts.some(
+          (font) => font.family === fontName.family && font.style === fontName.style
+        )
+      ) {
+        throw new Error(`Missing font: ${key}`);
+      }
       if (unavailableFonts.includes(fontName.family) || unavailableFonts.includes(key)) {
         throw new Error(`Missing font: ${key}`);
       }
@@ -77,6 +91,11 @@ function createFakeFigma({ unavailableFonts = [], failImages = false, defaultFra
     loadedFonts: [],
     createdImages: [],
   };
+
+  if (Array.isArray(availableFonts)) {
+    figma.listAvailableFontsAsync = async () =>
+      availableFonts.map((fontName) => ({ fontName }));
+  }
 
   function createNode(type) {
     const node = {
@@ -117,6 +136,159 @@ function createFakeFigma({ unavailableFonts = [], failImages = false, defaultFra
 
   return figma;
 }
+
+test("flattened positioned content keeps its CSS z-index above later image siblings", async () => {
+  const figma = createFakeFigma();
+  const scene = {
+    version: 1,
+    source: { url: "https://example.com/promo", selector: "body" },
+    viewport: { width: 1200, height: 800 },
+    assets: {
+      hero: {
+        src: "https://example.com/hero.jpg",
+        contentType: "image/jpeg",
+        base64: "QUJD",
+      },
+    },
+    root: {
+      kind: "frame",
+      name: "Body",
+      source: { tag: "body" },
+      rect: { x: 0, y: 0, width: 640, height: 360 },
+      children: [
+        {
+          kind: "frame",
+          name: "Promo Tile",
+          source: { tag: "section" },
+          rect: { x: 0, y: 0, width: 640, height: 360 },
+          style: { backgroundColor: "rgb(245, 245, 247)", overflow: "hidden" },
+          children: [
+            {
+              kind: "frame",
+              name: "Copy Wrapper",
+              source: { tag: "div" },
+              paintOrder: 1,
+              rect: { x: 160, y: 40, width: 320, height: 64 },
+              style: { position: "relative", zIndex: "2" },
+              children: [
+                {
+                  kind: "text",
+                  paintOrder: 2,
+                  text: "MacBook Air",
+                  rect: { x: 200, y: 48, width: 240, height: 44 },
+                  style: { fontFamily: "Inter", fontSize: 36, fontWeight: 600 },
+                },
+              ],
+            },
+            {
+              kind: "frame",
+              name: "Image Wrapper",
+              source: { tag: "div" },
+              paintOrder: 3,
+              rect: { x: 0, y: 0, width: 640, height: 360 },
+              style: { position: "absolute", zIndex: "auto" },
+              children: [
+                {
+                  kind: "image",
+                  paintOrder: 4,
+                  assetId: "hero",
+                  rect: { x: 0, y: 0, width: 640, height: 360 },
+                  style: { objectFit: "cover" },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  };
+
+  const result = await importSceneToFigma(scene, { figma });
+  const tile = result.root.children[0];
+
+  assert.deepEqual(
+    tile.children.map((node) => node.type),
+    ["RECTANGLE", "TEXT"],
+    "image should be below the higher-z-index editable headline"
+  );
+  assert.equal(tile.children[1].characters, "MacBook Air");
+});
+
+test("font loading resolves real Figma family and style names from the CSS font stack", async () => {
+  const figma = createFakeFigma({
+    availableFonts: [
+      { family: "SF Pro Text", style: "Semibold" },
+      { family: "Helvetica Neue", style: "Medium" },
+      { family: "Inter", style: "Regular" },
+    ],
+  });
+  const scene = {
+    version: 1,
+    source: { url: "https://example.com/type", selector: "body" },
+    viewport: { width: 800, height: 600 },
+    root: {
+      kind: "frame",
+      name: "Typography",
+      rect: { x: 0, y: 0, width: 400, height: 180 },
+      children: [
+        {
+          kind: "text",
+          text: "Available semibold",
+          rect: { x: 24, y: 32, width: 280, height: 36 },
+          style: {
+            fontFamily: '"SF Pro Text", "Helvetica Neue", Arial, sans-serif',
+            fontSize: 28,
+            fontWeight: 600,
+          },
+        },
+      ],
+    },
+  };
+
+  const result = await importSceneToFigma(scene, { figma });
+  const text = result.root.children[0];
+
+  assert.deepEqual(text.fontName, { family: "SF Pro Text", style: "Semibold" });
+  assert.equal(text.characters, "Available semibold");
+});
+
+test("font loading tries later CSS families before the configured fallback", async () => {
+  const figma = createFakeFigma({
+    availableFonts: [
+      { family: "Site Icons", style: "Regular" },
+      { family: "Helvetica Neue", style: "Medium" },
+      { family: "Inter", style: "Regular" },
+    ],
+  });
+  const scene = {
+    version: 1,
+    source: { url: "https://example.com/type", selector: "body" },
+    viewport: { width: 800, height: 600 },
+    root: {
+      kind: "frame",
+      name: "Typography",
+      rect: { x: 0, y: 0, width: 400, height: 180 },
+      children: [
+        {
+          kind: "text",
+          text: "Stack fallback",
+          rect: { x: 24, y: 32, width: 240, height: 32 },
+          style: {
+            fontFamily: '"Unavailable Web Font", "Site Icons", "Helvetica Neue", Arial, sans-serif',
+            fontSize: 24,
+            fontWeight: 500,
+          },
+        },
+      ],
+    },
+  };
+
+  const result = await importSceneToFigma(scene, { figma });
+  assert.deepEqual(result.root.children[0].fontName, {
+    family: "Helvetica Neue",
+    style: "Medium",
+  });
+});
 
 test("a captured component imports as a focused Figma root with editable text", async () => {
   const figma = createFakeFigma();
@@ -162,6 +334,253 @@ test("a captured component imports as a focused Figma root with editable text", 
   assert.deepEqual(figma.focusedNodes, [[result.root]]);
   assert.deepEqual(figma.currentPage.children, [result.root]);
   assert.equal(result.root.children.length, 1);
+});
+
+test("manually stopped captures are named separately from automatic content-flow segments", async () => {
+  const figma = createFakeFigma();
+  const scene = {
+    version: 1,
+    source: { url: "https://example.com/feed", selector: "body" },
+    capture: {
+      contentFlow: {
+        isSegment: true,
+        segmentIndex: 1,
+        reason: "user-stopped",
+        stoppedByUser: true,
+      },
+    },
+    root: {
+      kind: "frame",
+      name: "Body",
+      source: { tag: "body" },
+      rect: { x: 0, y: 0, width: 800, height: 1800 },
+      children: [],
+    },
+  };
+
+  const result = await importSceneToFigma(scene, { figma });
+
+  assert.equal(result.root.name, "Web to Figma · Body · 手动停止采集");
+});
+
+test("import normalizes overlapping fixed top and side app shells from older captures", async () => {
+  const figma = createFakeFigma();
+  const scene = {
+    version: 1,
+    source: { url: "https://example.com/feed", selector: "body" },
+    root: {
+      kind: "frame",
+      name: "Body",
+      source: { tag: "body" },
+      rect: { x: 0, y: 0, width: 1200, height: 1800 },
+      children: [
+        {
+          kind: "frame",
+          name: "Top app bar",
+          source: { tag: "header" },
+          rect: { x: 0, y: 0, width: 1200, height: 64 },
+          style: {
+            position: "fixed",
+            zIndex: "2020",
+            backgroundColor: "rgba(0, 0, 0, 0)",
+          },
+          children: [
+            {
+              kind: "svg",
+              name: "Logo",
+              source: { tag: "svg" },
+              rect: { x: 40, y: 20, width: 96, height: 24 },
+              svg: "<svg />",
+            },
+          ],
+        },
+        {
+          kind: "frame",
+          name: "Left navigation rail",
+          source: { tag: "aside" },
+          rect: { x: 0, y: 0, width: 240, height: 900 },
+          style: {
+            position: "fixed",
+            zIndex: "2021",
+            backgroundColor: "rgb(255, 255, 255)",
+          },
+          children: [
+            {
+              kind: "text",
+              name: "Home label",
+              text: "Home",
+              source: { tag: "span" },
+              rect: { x: 72, y: 18, width: 48, height: 20 },
+              style: { fontFamily: "Inter", fontSize: 16 },
+            },
+          ],
+        },
+      ],
+    },
+  };
+
+  const result = await importSceneToFigma(scene, { figma });
+  const sideRail = result.root.children.find((node) => node.name === "Aside");
+
+  assert.ok(sideRail, "expected fixed side rail to remain as an editable frame");
+  assert.equal(sideRail.y, 64);
+  assert.equal(sideRail.height, 836);
+  assert.equal(sideRail.children[0].y, 18);
+  assert.equal(scene.capture.normalizedFixedShells.strategy, "avoid-overlapping-fixed-top-and-side-shells");
+});
+
+test("import normalizes inset fixed top bars hidden under primary app bars", async () => {
+  const figma = createFakeFigma();
+  const scene = {
+    version: 1,
+    source: { url: "https://example.com/feed", selector: "body" },
+    root: {
+      kind: "frame",
+      name: "Body",
+      source: { tag: "body" },
+      rect: { x: 0, y: 0, width: 1200, height: 1800 },
+      children: [
+        {
+          kind: "frame",
+          name: "Primary top app bar",
+          source: { tag: "header" },
+          rect: { x: 0, y: 0, width: 1200, height: 64 },
+          style: {
+            position: "fixed",
+            zIndex: "2020",
+            backgroundColor: "rgba(0, 0, 0, 0)",
+          },
+          children: [
+            {
+              kind: "text",
+              name: "Search field",
+              text: "Search",
+              source: { tag: "span" },
+              rect: { x: 420, y: 20, width: 220, height: 24 },
+              style: { fontFamily: "Inter", fontSize: 16 },
+            },
+          ],
+        },
+        {
+          kind: "frame",
+          name: "Content filter chips",
+          source: { tag: "nav" },
+          rect: { x: 240, y: 0, width: 960, height: 56 },
+          style: {
+            position: "fixed",
+            zIndex: "2019",
+            backgroundColor: "rgba(0, 0, 0, 0)",
+          },
+          children: [
+            {
+              kind: "text",
+              name: "All chip",
+              text: "All",
+              source: { tag: "span" },
+              rect: { x: 264, y: 18, width: 40, height: 20 },
+              style: { fontFamily: "Inter", fontSize: 16 },
+            },
+          ],
+        },
+      ],
+    },
+  };
+
+  const result = await importSceneToFigma(scene, { figma });
+  const filterBar = result.root.children.find((node) => node.name === "Navigation");
+
+  assert.ok(filterBar, "expected inset fixed top bar to remain importable");
+  assert.equal(filterBar.y, 64);
+  assert.equal(filterBar.children[0].y, 18);
+});
+
+test("transparent wrappers with fixed app-shell descendants inherit their stacking order", async () => {
+  const figma = createFakeFigma();
+  const scene = {
+    version: 1,
+    source: { url: "https://example.com/feed", selector: "body" },
+    root: {
+      kind: "frame",
+      name: "Body",
+      source: { tag: "body" },
+      rect: { x: 0, y: 0, width: 1200, height: 1200 },
+      children: [
+        {
+          kind: "frame",
+          name: "Main content wrapper",
+          source: { tag: "main" },
+          rect: { x: 240, y: 64, width: 960, height: 900 },
+          style: { backgroundColor: "rgba(0, 0, 0, 0)" },
+          children: [
+            {
+              kind: "frame",
+              name: "Content filter chips",
+              source: { tag: "nav" },
+              rect: { x: 240, y: 0, width: 960, height: 56 },
+              style: {
+                position: "fixed",
+                zIndex: "2019",
+                backgroundColor: "rgba(0, 0, 0, 0)",
+              },
+              children: [
+                {
+                  kind: "text",
+                  name: "All chip",
+                  text: "All",
+                  source: { tag: "span" },
+                  rect: { x: 264, y: 18, width: 40, height: 20 },
+                  style: { fontFamily: "Inter", fontSize: 16 },
+                },
+              ],
+            },
+          ],
+        },
+        {
+          kind: "frame",
+          name: "Top backdrop",
+          source: { tag: "div" },
+          rect: { x: 0, y: 0, width: 1200, height: 120 },
+          style: {
+            position: "fixed",
+            zIndex: "2018",
+            backgroundColor: "rgba(255, 255, 255, 0.9)",
+          },
+          children: [],
+        },
+        {
+          kind: "frame",
+          name: "Top controls",
+          source: { tag: "header" },
+          rect: { x: 0, y: 0, width: 1200, height: 64 },
+          style: {
+            position: "fixed",
+            zIndex: "2020",
+            backgroundColor: "rgba(0, 0, 0, 0)",
+          },
+          children: [
+            {
+              kind: "text",
+              name: "Search field",
+              text: "Search",
+              source: { tag: "span" },
+              rect: { x: 420, y: 20, width: 220, height: 24 },
+              style: { fontFamily: "Inter", fontSize: 16 },
+            },
+          ],
+        },
+      ],
+    },
+  };
+
+  const result = await importSceneToFigma(scene, { figma });
+
+  assert.equal(result.root.children[1].name, "Main");
+  assert.equal(result.root.children[2].name, "Header");
+  assert.equal(
+    result.root.children[0].width,
+    1200,
+    "lower-z fixed backdrop should stay below the transparent main wrapper"
+  );
 });
 
 test("failed child imports stay visible inside the generated root", async () => {
@@ -474,6 +893,56 @@ test("svg image assets import as vectors instead of broken bitmap fills", async 
   assert.equal(vector.width, 120);
   assert.equal(vector.height, 60);
   assert.equal(figma.createdImages.length, 0);
+});
+
+test("external svg sprite uses import as self-contained visible vectors", async () => {
+  const figma = createFakeFigma();
+  const sprite =
+    "<svg xmlns=\"http://www.w3.org/2000/svg\"><symbol id=\"new-chat\" viewBox=\"0 0 20 20\"><path d=\"M4 4h12v12H4z\" fill=\"currentColor\"/></symbol></svg>";
+  const scene = {
+    version: 1,
+    source: { url: "https://example.com/app", selector: "body" },
+    viewport: { width: 800, height: 600 },
+    assets: {
+      "sprite-1": {
+        src: "https://example.com/cdn/icons.svg",
+        contentType: "image/svg+xml",
+        base64: Buffer.from(sprite, "utf8").toString("base64"),
+      },
+    },
+    root: {
+      kind: "frame",
+      name: "Icon Page",
+      rect: { x: 0, y: 0, width: 120, height: 80 },
+      children: [
+        {
+          kind: "svg",
+          name: "External sprite icon",
+          source: { tag: "svg" },
+          rect: { x: 16, y: 20, width: 20, height: 20 },
+          style: { color: "rgb(13, 13, 13)" },
+          svg: "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\"><use href=\"https://example.com/cdn/icons.svg#new-chat\" fill=\"currentColor\"></use></svg>",
+          svgUses: [
+            {
+              assetId: "sprite-1",
+              url: "https://example.com/cdn/icons.svg",
+              symbolId: "new-chat",
+            },
+          ],
+        },
+      ],
+    },
+  };
+
+  const result = await importSceneToFigma(scene, { figma });
+  const vector = result.root.children[0];
+
+  assert.equal(vector.type, "VECTOR");
+  assert.match(vector.svg, /<path\b/);
+  assert.match(vector.svg, /viewBox="0 0 20 20"/);
+  assert.equal(vector.svg.includes("<use"), false);
+  assert.equal(vector.svg.includes("currentColor"), false);
+  assert.match(vector.svg, /rgb\(13, 13, 13\)/);
 });
 
 test("invalid image assets degrade locally instead of failing the full import", async () => {
@@ -920,6 +1389,142 @@ test("scroll containers clip scrolled children without clipping layout wrappers"
   assert.equal(scrollPane.clipsContent, true);
   assert.equal(scrolledText.characters, "Refore HTML to Figma");
   assert.equal(scrolledText.y, -68.2);
+});
+
+test("show overflow mode keeps off-canvas captured carousel content visible", async () => {
+  const scene = {
+    version: 1,
+    source: { url: "https://example.com/catalog", selector: "body" },
+    viewport: { width: 1200, height: 800 },
+    root: {
+      kind: "frame",
+      name: "Body",
+      rect: { x: 0, y: 0, width: 600, height: 400 },
+      style: { overflow: "visible" },
+      children: [
+        {
+          kind: "frame",
+          name: "div.carousel-viewport",
+          rect: { x: 0, y: 80, width: 600, height: 240 },
+          style: { overflowX: "hidden" },
+          children: [
+            {
+              kind: "frame",
+              name: "ul.carousel-track",
+              rect: { x: 0, y: 80, width: 1800, height: 240 },
+              style: { overflow: "visible" },
+              children: [
+                {
+                  kind: "frame",
+                  name: "li.carousel-slide",
+                  rect: { x: 620, y: 80, width: 560, height: 240 },
+                  style: { backgroundColor: "rgb(0, 113, 227)" },
+                  children: [],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  };
+
+  const clippedFigma = createFakeFigma({ defaultFrameClipsContent: true });
+  const clipped = await importSceneToFigma(scene, { figma: clippedFigma });
+  assert.equal(clipped.root.children[0].clipsContent, true);
+
+  const exposedFigma = createFakeFigma({ defaultFrameClipsContent: true });
+  const exposed = await importSceneToFigma(scene, {
+    figma: exposedFigma,
+    overflowMode: "show",
+  });
+  const viewport = exposed.root.children[0];
+  const slide = viewport.children[0].children[0];
+
+  assert.equal(viewport.clipsContent, false);
+  assert.equal(slide.x, 620);
+  assert.equal(slide.width, 560);
+});
+
+test("sidecar overflow mode preserves the page crop and exports off-canvas media items", async () => {
+  const scene = {
+    version: 1,
+    source: { url: "https://example.com/catalog", selector: "body" },
+    viewport: { width: 1200, height: 800 },
+    assets: {
+      "asset-card": { id: "asset-card", contentType: "image/png", base64: "AA==" },
+    },
+    root: {
+      kind: "frame",
+      name: "Body",
+      rect: { x: 0, y: 0, width: 600, height: 400 },
+      style: { overflow: "visible" },
+      children: [
+        {
+          kind: "frame",
+          name: "div.carousel-viewport",
+          tag: "div",
+          rect: { x: 0, y: 80, width: 600, height: 240 },
+          style: { overflowX: "hidden" },
+          children: [
+            {
+              kind: "frame",
+              name: "ul.carousel-track",
+              tag: "ul",
+              rect: { x: 0, y: 80, width: 1800, height: 240 },
+              style: { overflow: "visible" },
+              children: [
+                {
+                  kind: "frame",
+                  name: "li.visible-slide",
+                  tag: "li",
+                  rect: { x: 0, y: 80, width: 560, height: 240 },
+                  children: [
+                    {
+                      kind: "image",
+                      name: "img.visible-slide",
+                      tag: "img",
+                      assetId: "asset-card",
+                      rect: { x: 0, y: 80, width: 560, height: 240 },
+                    },
+                  ],
+                },
+                {
+                  kind: "frame",
+                  name: "li.off-canvas-slide",
+                  tag: "li",
+                  rect: { x: 620, y: 80, width: 560, height: 240 },
+                  children: [
+                    {
+                      kind: "image",
+                      name: "img.off-canvas-slide",
+                      tag: "img",
+                      assetId: "asset-card",
+                      rect: { x: 620, y: 80, width: 560, height: 240 },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  };
+  const figma = createFakeFigma({ defaultFrameClipsContent: true });
+
+  const result = await importSceneToFigma(scene, { figma, overflowMode: "sidecar" });
+  const viewport = result.root.children[0];
+
+  assert.equal(viewport.clipsContent, true);
+  assert.ok(result.overflow);
+  assert.equal(result.overflow.name, "Captured overflow content");
+  assert.equal(result.overflow.x, 696);
+  assert.equal(result.overflow.y, 0);
+  assert.equal(result.overflow.children.length, 1);
+  assert.equal(result.overflow.children[0].name, "List Item");
+  assert.equal(result.overflow.children[0].x, 0);
+  assert.equal(result.overflow.children[0].y, 0);
 });
 
 test("one-sided borders import as thin divider rectangles", async () => {

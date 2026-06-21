@@ -28,6 +28,259 @@
     };
   }
 
+  function assignSourceRect(node, rect) {
+    if (!node) return;
+    const next = {
+      x: rect.x,
+      y: rect.y,
+      width: rect.width,
+      height: rect.height,
+    };
+
+    node.rect = next;
+    if (node.absoluteRect) {
+      node.absoluteRect = {
+        x: next.x,
+        y: next.y,
+        width: next.width,
+        height: next.height,
+      };
+    }
+    if (node.design && node.design.absoluteRect) {
+      node.design.absoluteRect = {
+        x: next.x,
+        y: next.y,
+        width: next.width,
+        height: next.height,
+      };
+    }
+    if (node.layout && node.layout.absolute) {
+      node.layout.absolute = {
+        x: next.x,
+        y: next.y,
+        width: next.width,
+        height: next.height,
+      };
+    }
+  }
+
+  function visitSourceTree(node, visitor) {
+    if (!node || typeof node !== "object") return;
+    visitor(node);
+    const children = node.children || [];
+    for (let index = 0; index < children.length; index++) {
+      visitSourceTree(children[index], visitor);
+    }
+  }
+
+  function sourceRectsIntersect(a, b, tolerance) {
+    const gap = tolerance || 0;
+    return (
+      a.x < b.x + b.width - gap &&
+      a.x + a.width > b.x + gap &&
+      a.y < b.y + b.height - gap &&
+      a.y + a.height > b.y + gap
+    );
+  }
+
+  function sourceRectIntersection(a, b) {
+    if (!sourceRectsIntersect(a, b, 0)) return null;
+    const x = Math.max(a.x, b.x);
+    const y = Math.max(a.y, b.y);
+    const right = Math.min(a.x + a.width, b.x + b.width);
+    const bottom = Math.min(a.y + a.height, b.y + b.height);
+    return {
+      x,
+      y,
+      width: Math.max(0, right - x),
+      height: Math.max(0, bottom - y),
+    };
+  }
+
+  function isTransparentSourceColor(value) {
+    const raw = String(value || "").trim().toLowerCase();
+    return (
+      !raw ||
+      raw === "transparent" ||
+      raw === "rgba(0, 0, 0, 0)" ||
+      raw === "rgba(0,0,0,0)" ||
+      /rgba\([^)]*,\s*0(?:\.0+)?\s*\)/.test(raw)
+    );
+  }
+
+  function sourceHasVisiblePaint(node, options) {
+    const nodeType = String((node && (node.kind || node.type)) || "").toLowerCase();
+    const style = (node && node.style) || {};
+    const includeBackground = options && options.includeBackground;
+
+    if (nodeType === "text" && String((node && node.text) || "").trim()) return true;
+    if (nodeType === "image" || nodeType === "raster" || nodeType === "svg") return true;
+    if (node && (node.assetId || node.svg)) return true;
+    if (style.backgroundAssetId || style.fill) return true;
+    if (number(style.borderWidth) > 0 && !isTransparentSourceColor(style.borderColor)) return true;
+    if (includeBackground && !isTransparentSourceColor(style.backgroundColor)) return true;
+    return false;
+  }
+
+  function sourceHasVisibleContentInRegion(node, region, options) {
+    let found = false;
+    visitSourceTree(node, (candidate) => {
+      if (found) return;
+      const rect = rectOf(candidate);
+      if (!sourceRectsIntersect(rect, region, 0.5)) return;
+      const overlap = sourceRectIntersection(rect, region);
+      if (!overlap || overlap.width < 1 || overlap.height < 1) return;
+      if (sourceHasVisiblePaint(candidate, options)) found = true;
+    });
+    return found;
+  }
+
+  function isFixedShellSourceNode(node) {
+    const style = (node && node.style) || {};
+    const design = (node && node.design) || {};
+    const position = String(style.position || design.position || "").toLowerCase();
+    return position === "fixed" || position === "sticky";
+  }
+
+  function isTopShellSourceNode(node, rootRect) {
+    const rect = rectOf(node);
+    const maxHeight = Math.min(160, Math.max(48, rootRect.height * 0.3));
+    return (
+      rect.y <= rootRect.y + 4 &&
+      rect.height >= 24 &&
+      rect.height <= maxHeight &&
+      rect.width >= Math.min(rootRect.width * 0.5, 480) &&
+      rect.width >= rect.height * 3
+    );
+  }
+
+  function isSideShellSourceNode(node, rootRect) {
+    const rect = rectOf(node);
+    const nearLeft = rect.x <= rootRect.x + 4;
+    const nearRight = rect.x + rect.width >= rootRect.x + rootRect.width - 4;
+    return (
+      (nearLeft || nearRight) &&
+      rect.y <= rootRect.y + 4 &&
+      rect.width >= 72 &&
+      rect.width <= rootRect.width * 0.45 &&
+      rect.height >= 160 &&
+      rect.height >= rect.width * 1.5
+    );
+  }
+
+  function translateSourceTree(node, deltaY) {
+    if (!node || !Number.isFinite(deltaY) || Math.abs(deltaY) < 0.5) return;
+    const rect = rectOf(node);
+    assignSourceRect(node, {
+      x: rect.x,
+      y: rect.y + deltaY,
+      width: rect.width,
+      height: rect.height,
+    });
+    const children = node.children || [];
+    for (let index = 0; index < children.length; index++) {
+      translateSourceTree(children[index], deltaY);
+    }
+  }
+
+  function moveSideShellSourceBelowTop(sideNode, targetTop) {
+    const rect = rectOf(sideNode);
+    const deltaY = targetTop - rect.y;
+    if (deltaY <= 0.5 || targetTop >= rect.y + rect.height - 24) return false;
+
+    translateSourceTree(sideNode, deltaY);
+    const nextRect = rectOf(sideNode);
+    assignSourceRect(sideNode, {
+      x: nextRect.x,
+      y: nextRect.y,
+      width: nextRect.width,
+      height: Math.max(1, rect.y + rect.height - targetTop),
+    });
+    return true;
+  }
+
+  function isInsetTopShellSourceItem(item, rootRect) {
+    const rect = item && item.rect ? item.rect : rectOf(item && item.node);
+    return rect.x > rootRect.x + 4 || rect.width < rootRect.width - 8;
+  }
+
+  function moveTopShellSourceBelowTop(shellNode, targetTop) {
+    const rect = rectOf(shellNode);
+    const deltaY = targetTop - rect.y;
+    if (deltaY <= 0.5) return false;
+    translateSourceTree(shellNode, deltaY);
+    return true;
+  }
+
+  function normalizeFixedShellOverlaps(scene) {
+    const root = scene && scene.root;
+    if (!root) return 0;
+
+    const rootRect = rectOf(root);
+    const fixedNodes = [];
+    visitSourceTree(root, (node) => {
+      if (node === root || !isFixedShellSourceNode(node)) return;
+      const rect = rectOf(node);
+      if (rect.width <= 1 || rect.height <= 1) return;
+      fixedNodes.push({ node, rect });
+    });
+
+    const topShells = [];
+    const sideShells = [];
+    for (let index = 0; index < fixedNodes.length; index++) {
+      const item = fixedNodes[index];
+      if (isTopShellSourceNode(item.node, rootRect)) topShells.push(item);
+      if (isSideShellSourceNode(item.node, rootRect)) sideShells.push(item);
+    }
+
+    let adjusted = 0;
+    for (let shellIndex = 0; shellIndex < topShells.length; shellIndex++) {
+      const topShell = topShells[shellIndex];
+      if (!isInsetTopShellSourceItem(topShell, rootRect)) continue;
+
+      let targetTop = topShell.rect.y;
+      for (let blockerIndex = 0; blockerIndex < topShells.length; blockerIndex++) {
+        const blocker = topShells[blockerIndex];
+        if (blocker.node === topShell.node) continue;
+        if (isInsetTopShellSourceItem(blocker, rootRect)) continue;
+
+        const overlap = sourceRectIntersection(topShell.rect, blocker.rect);
+        if (!overlap || overlap.width < 8 || overlap.height < 8) continue;
+        if (!sourceHasVisibleContentInRegion(blocker.node, overlap)) continue;
+        if (!sourceHasVisibleContentInRegion(topShell.node, overlap, { includeBackground: true })) continue;
+        targetTop = Math.max(targetTop, blocker.rect.y + blocker.rect.height);
+      }
+
+      if (moveTopShellSourceBelowTop(topShell.node, targetTop)) adjusted++;
+    }
+
+    for (let sideIndex = 0; sideIndex < sideShells.length; sideIndex++) {
+      const sideShell = sideShells[sideIndex];
+      let targetTop = sideShell.rect.y;
+
+      for (let topIndex = 0; topIndex < topShells.length; topIndex++) {
+        const topShell = topShells[topIndex];
+        const overlap = sourceRectIntersection(sideShell.rect, topShell.rect);
+        if (!overlap || overlap.width < 8 || overlap.height < 8) continue;
+        if (!sourceHasVisibleContentInRegion(topShell.node, overlap)) continue;
+        if (!sourceHasVisibleContentInRegion(sideShell.node, overlap, { includeBackground: true })) continue;
+        targetTop = Math.max(targetTop, topShell.rect.y + topShell.rect.height);
+      }
+
+      if (moveSideShellSourceBelowTop(sideShell.node, targetTop)) adjusted++;
+    }
+
+    if (adjusted > 0) {
+      scene.capture = scene.capture || {};
+      scene.capture.normalizedFixedShells = {
+        adjusted,
+        strategy: "avoid-overlapping-fixed-top-and-side-shells",
+      };
+    }
+
+    return adjusted;
+  }
+
   function titleCase(value) {
     return String(value || "")
       .replace(/[-_]+/g, " ")
@@ -192,7 +445,15 @@
   }
 
   function rootName(scene, rootNode) {
-    return `Web to Figma · ${semanticName(rootNode, (scene && scene.source && scene.source.url) || "Capture")}`;
+    const base = `Web to Figma · ${semanticName(rootNode, (scene && scene.source && scene.source.url) || "Capture")}`;
+    const flow = scene && scene.capture && scene.capture.contentFlow;
+    if (flow && flow.isSegment) {
+      if (flow.stoppedByUser || flow.reason === "user-stopped") {
+        return `${base} · 手动停止采集`;
+      }
+      return `${base} · 内容流第 ${number(flow.segmentIndex, 1)} 段`;
+    }
+    return base;
   }
 
   function fontStyleFromWeight(weight) {
@@ -202,6 +463,105 @@
     if (numeric >= 600) return "Semi Bold";
     if (numeric <= 300) return "Light";
     return "Regular";
+  }
+
+  const GENERIC_FONT_FAMILIES = new Set([
+    "cursive",
+    "fantasy",
+    "monospace",
+    "sans-serif",
+    "serif",
+    "system-ui",
+    "ui-monospace",
+    "ui-rounded",
+    "ui-sans-serif",
+    "ui-serif",
+  ]);
+
+  function fontFamilies(value) {
+    return splitCssLayers(value)
+      .map((family) => family.trim().replace(/^["']|["']$/g, ""))
+      .filter(
+        (family) =>
+          family && !GENERIC_FONT_FAMILIES.has(family.toLowerCase())
+      );
+  }
+
+  function uniqueFontNames(fonts) {
+    const seen = new Set();
+    return (fonts || []).filter((font) => {
+      if (!font || !font.family || !font.style) return false;
+      const key = `${font.family.toLowerCase()}/${font.style.toLowerCase()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  function isIconFontFamily(family) {
+    return /(?:^|[\s_-])(icon|icons|symbol|symbols|emoji)(?:$|[\s_-])/i.test(
+      String(family || "")
+    );
+  }
+
+  function textFontFamilies(families) {
+    const list = families || [];
+    const primaryIsIconFont = list.length > 0 && isIconFontFamily(list[0]);
+    return list.filter(
+      (family, index) =>
+        index === 0 || primaryIsIconFont || !isIconFontFamily(family)
+    );
+  }
+
+  function fontStyleWeight(style) {
+    const value = String(style || "").toLowerCase().replace(/[-_]+/g, " ");
+    if (/thin|hairline/.test(value)) return 100;
+    if (/extra\s*light|ultra\s*light/.test(value)) return 200;
+    if (/light/.test(value)) return 300;
+    if (/medium/.test(value)) return 500;
+    if (/semi\s*bold|demi\s*bold/.test(value)) return 600;
+    if (/extra\s*bold|ultra\s*bold/.test(value)) return 800;
+    if (/black|heavy/.test(value)) return 900;
+    if (/bold/.test(value)) return 700;
+    return 400;
+  }
+
+  function isItalicStyle(style) {
+    return /italic|oblique/i.test(String(style || ""));
+  }
+
+  function fontStyleCandidates(weight, italic) {
+    const numeric = number(weight, 400);
+    let styles;
+    if (numeric >= 850) styles = ["Black", "Heavy", "Extra Bold", "ExtraBold", "Bold"];
+    else if (numeric >= 750) styles = ["Extra Bold", "ExtraBold", "Bold", "Semibold", "Semi Bold"];
+    else if (numeric >= 650) styles = ["Bold", "Semibold", "Semi Bold", "Demi Bold"];
+    else if (numeric >= 550) styles = ["Semibold", "Semi Bold", "Demi Bold", "Medium", "Bold"];
+    else if (numeric >= 450) styles = ["Medium", "Regular", "Book"];
+    else if (numeric <= 150) styles = ["Thin", "Hairline", "Light", "Regular"];
+    else if (numeric <= 350) styles = ["Light", "Regular", "Book"];
+    else styles = ["Regular", "Book", "Normal"];
+
+    if (!italic) return styles;
+    return styles
+      .map((style) => (style === "Regular" || style === "Normal" ? "Italic" : `${style} Italic`))
+      .concat("Italic");
+  }
+
+  function fontFaceScore(fontName, desiredWeight, desiredItalic) {
+    const italicPenalty = isItalicStyle(fontName.style) === desiredItalic ? 0 : 1000;
+    return italicPenalty + Math.abs(fontStyleWeight(fontName.style) - desiredWeight);
+  }
+
+  async function availableFontNames(figma, options) {
+    if (!figma || typeof figma.listAvailableFontsAsync !== "function") return null;
+    if (!options.availableFontsPromise) {
+      options.availableFontsPromise = figma
+        .listAvailableFontsAsync()
+        .then((fonts) => (fonts || []).map((font) => font && font.fontName).filter(Boolean))
+        .catch(() => null);
+    }
+    return options.availableFontsPromise;
   }
 
   function clamp01(value) {
@@ -592,7 +952,15 @@
     if (design.opacity !== undefined) node.opacity = number(design.opacity, 1);
     else if (style.opacity !== undefined) node.opacity = number(style.opacity, 1);
     const overflow = `${style.overflow || ""} ${style.overflowX || ""} ${style.overflowY || ""}`;
-    const shouldClip = design.clipsContent === true || /\b(hidden|clip|auto|scroll)\b/i.test(overflow) || style.clipsContent === true;
+    // Figma has no scrollable-frame equivalent.  Keeping a browser's overflow crop
+    // therefore hides valid captured layers such as off-canvas carousel slides.
+    // Let callers choose whether this import is a browser-viewport snapshot or an
+    // editable inventory of every captured layer.  This is deliberately based on
+    // CSS semantics rather than page-specific selectors.
+    const shouldPreserveOverflowClip = options.overflowMode !== "show";
+    const shouldClip =
+      shouldPreserveOverflowClip &&
+      (design.clipsContent === true || /\b(hidden|clip|auto|scroll)\b/i.test(overflow) || style.clipsContent === true);
     if (node.type === "FRAME" || node.type === "COMPONENT" || node.type === "INSTANCE") {
       node.clipsContent = shouldClip;
     }
@@ -694,6 +1062,129 @@
     return contentType.indexOf("image/svg") >= 0 || src.indexOf("data:image/svg") === 0 || /\.svg(?:$|\?)/.test(src);
   }
 
+  function escapeRegExp(value) {
+    return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function svgAttributeValue(attrs, name) {
+    const pattern = new RegExp("\\b" + escapeRegExp(name) + "\\s*=\\s*([\"'])(.*?)\\1", "i");
+    const match = String(attrs || "").match(pattern);
+    return match ? match[2] : "";
+  }
+
+  function extractSvgSymbol(spriteSvg, symbolId) {
+    const raw = String(spriteSvg || "");
+    const id = String(symbolId || "");
+    if (!raw || !id) return null;
+
+    function scanTag(tag) {
+      const symbolPattern = new RegExp("<" + tag + "\\b([^>]*)>([\\s\\S]*?)</" + tag + ">", "gi");
+      let match = symbolPattern.exec(raw);
+      while (match) {
+        const attrs = match[1] || "";
+        if (svgAttributeValue(attrs, "id") === id) {
+          return {
+            tag,
+            attrs,
+            content: match[2] || "",
+            viewBox: svgAttributeValue(attrs, "viewBox"),
+          };
+        }
+        match = symbolPattern.exec(raw);
+      }
+      return null;
+    }
+
+    return scanTag("symbol") || scanTag("g") || scanTag("svg");
+  }
+
+  function svgUsePresentationAttributes(useTag) {
+    const raw = String(useTag || "");
+    const attrs = [];
+    const attrPattern = /\s([:\w-]+)\s*=\s*(["'])(.*?)\2/g;
+    let match = attrPattern.exec(raw);
+    while (match) {
+      const name = match[1];
+      if (/^(?:href|xlink:href|xmlns:xlink)$/i.test(name)) {
+        match = attrPattern.exec(raw);
+        continue;
+      }
+      if (
+        /^(?:fill|stroke|stroke-width|stroke-linecap|stroke-linejoin|stroke-miterlimit|stroke-dasharray|stroke-dashoffset|opacity|fill-rule|clip-rule|style|class|transform|x|y|width|height)$/i.test(
+          name
+        )
+      ) {
+        attrs.push(`${name}=${match[2]}${match[3]}${match[2]}`);
+      }
+      match = attrPattern.exec(raw);
+    }
+    return attrs.length ? " " + attrs.join(" ") : "";
+  }
+
+  function sourceSvgUseReferences(sourceNode) {
+    const explicit = sourceNode && sourceNode.svgUses;
+    if (Array.isArray(explicit)) return explicit;
+    if (sourceNode && sourceNode.svgUse) return [sourceNode.svgUse];
+    return [];
+  }
+
+  function spriteTextForUse(scene, useReference) {
+    const assetId = useReference && useReference.assetId;
+    const asset = assetId ? assetFor(scene, { assetId }) : null;
+    if (!asset) return "";
+    return asset.svg || decodeBase64Text(asset.base64 || asset.data || "");
+  }
+
+  function applySvgViewBox(svg, viewBox) {
+    const raw = String(svg || "");
+    const box = String(viewBox || "").trim();
+    if (!raw || !box || /\bviewBox\s*=/.test(raw)) return raw;
+    return raw.replace(/<svg\b([^>]*)>/i, `<svg$1 viewBox="${box}">`);
+  }
+
+  function inlineSvgSpriteUses(svg, scene, sourceNode) {
+    let output = String(svg || "");
+    const uses = sourceSvgUseReferences(sourceNode);
+    if (!output || !uses.length) return output;
+
+    for (let index = 0; index < uses.length; index++) {
+      const useReference = uses[index] || {};
+      const symbolId = String(useReference.symbolId || "").trim();
+      const spriteSvg = spriteTextForUse(scene, useReference);
+      const symbol = extractSvgSymbol(spriteSvg, symbolId);
+      if (!symbol || !symbol.content) continue;
+
+      const symbolPattern = escapeRegExp("#" + symbolId);
+      const usePattern = new RegExp(
+        "<use\\b(?=[^>]*(?:href|xlink:href)\\s*=\\s*['\\\"][^'\\\"]*" +
+          symbolPattern +
+          "['\\\"])[^>]*(?:/>|>\\s*</use>)",
+        "gi"
+      );
+
+      output = output.replace(usePattern, (useTag) => {
+        const attrs = svgUsePresentationAttributes(useTag);
+        return `<g${attrs}>${symbol.content}</g>`;
+      });
+      output = applySvgViewBox(output, symbol.viewBox);
+    }
+
+    return output;
+  }
+
+  function currentColorCss(sourceNode) {
+    const style = (sourceNode && sourceNode.style) || {};
+    const design = (sourceNode && sourceNode.design) || {};
+    const designText = design.text || {};
+    const raw = style.color || designText.color || "rgb(0, 0, 0)";
+    return String(raw || "rgb(0, 0, 0)");
+  }
+
+  function normalizeSvgForFigma(svg, scene, sourceNode) {
+    const inlined = inlineSvgSpriteUses(svg, scene, sourceNode);
+    return String(inlined || "<svg />").replace(/\bcurrentColor\b/g, currentColorCss(sourceNode));
+  }
+
   function imageScaleMode(sourceNode) {
     const designImage = sourceNode && sourceNode.design && sourceNode.design.image ? sourceNode.design.image : {};
     const fit = String(
@@ -707,24 +1198,80 @@
     return "FILL";
   }
 
-  async function loadFont(figma, node, fallbackFont = DEFAULT_FONT) {
+  async function loadFont(figma, node, options = {}) {
     const designText = node && node.design && node.design.text ? node.design.text : {};
-    const family = String(designText.fontFamily || (node && node.style && node.style.fontFamily) || DEFAULT_FONT.family)
-      .split(",")[0]
-      .replace(/^["']|["']$/g, "")
-      .trim() || DEFAULT_FONT.family;
-    const fontName = {
-      family,
-      style: fontStyleFromWeight(designText.fontWeight || (node && node.style ? node.style.fontWeight : undefined)),
-    };
+    const style = node && node.style ? node.style : {};
+    const fallbackFont = options.fallbackFont || DEFAULT_FONT;
+    const desiredWeight = number(designText.fontWeight || style.fontWeight, 400);
+    const desiredItalic = /italic|oblique/i.test(
+      String(designText.fontStyle || style.fontStyle || "")
+    );
+    const sourceFamilies = textFontFamilies(
+      fontFamilies(designText.fontFamily || style.fontFamily)
+    );
+    const familyStack = sourceFamilies
+      .concat(fallbackFont.family, DEFAULT_FONT.family)
+      .filter(Boolean);
+    const cacheKey = `${familyStack.join(",")}|${desiredWeight}|${desiredItalic}`;
 
-    try {
-      await figma.loadFontAsync(fontName);
-      return fontName;
-    } catch (error) {
-      await figma.loadFontAsync(fallbackFont);
-      return fallbackFont;
+    if (!options.fontCache) options.fontCache = new Map();
+    const cached = options.fontCache.get(cacheKey);
+    if (cached) {
+      await figma.loadFontAsync(cached);
+      return cached;
     }
+
+    const available = await availableFontNames(figma, options);
+    const candidates = [];
+
+    if (Array.isArray(available) && available.length) {
+      for (const family of familyStack) {
+        const matches = available
+          .filter((font) => font.family.toLowerCase() === String(family).toLowerCase())
+          .sort(
+            (left, right) =>
+              fontFaceScore(left, desiredWeight, desiredItalic) -
+              fontFaceScore(right, desiredWeight, desiredItalic)
+          );
+        for (const match of matches) candidates.push(match);
+      }
+
+      if (!candidates.length) {
+        const sortedAvailable = available.slice().sort(
+          (left, right) =>
+            fontFaceScore(left, desiredWeight, desiredItalic) -
+            fontFaceScore(right, desiredWeight, desiredItalic)
+        );
+        for (const fontName of sortedAvailable) candidates.push(fontName);
+      }
+    } else {
+      const styles = fontStyleCandidates(desiredWeight, desiredItalic);
+      for (const family of sourceFamilies) {
+        for (const styleName of styles) candidates.push({ family, style: styleName });
+      }
+    }
+
+    candidates.push(
+      fallbackFont,
+      DEFAULT_FONT,
+      {
+        family: familyStack[0] || DEFAULT_FONT.family,
+        style: fontStyleFromWeight(desiredWeight),
+      }
+    );
+
+    let lastError = null;
+    for (const fontName of uniqueFontNames(candidates)) {
+      try {
+        await figma.loadFontAsync(fontName);
+        options.fontCache.set(cacheKey, fontName);
+        return fontName;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError || new Error("No available Figma font could be loaded");
   }
 
   function place(node, rect, parentRect) {
@@ -1004,6 +1551,198 @@
     return children.length === 1;
   }
 
+  function explicitZIndex(sourceNode) {
+    const style = (sourceNode && sourceNode.style) || {};
+    const design = (sourceNode && sourceNode.design) || {};
+    const raw = design.zIndex !== undefined ? design.zIndex : style.zIndex;
+    if (raw === undefined || raw === null || String(raw).toLowerCase() === "auto") return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  function hasVisiblePaintOrEffect(sourceNode) {
+    const style = (sourceNode && sourceNode.style) || {};
+    const design = (sourceNode && sourceNode.design) || {};
+    if (hasVisibleDesignFill(sourceNode) || hasVisibleStyleFill(sourceNode)) return true;
+    if (strokeDefinitions(sourceNode).length > 0) return true;
+    if (Array.isArray(design.shadows) && design.shadows.length > 0) return true;
+    if (style.boxShadow && style.boxShadow !== "none") return true;
+    if (number(design.opacity, 1) !== 1 || number(style.opacity, 1) !== 1) return true;
+    return false;
+  }
+
+  function fixedDescendantStackingIndex(sourceNode) {
+    if (!sourceNode || hasVisiblePaintOrEffect(sourceNode)) return null;
+    const children = sourceNode.children || [];
+    let maxIndex = null;
+
+    function visitDescendant(node) {
+      if (!node || hasVisiblePaintOrEffect(node)) return;
+
+      const nodeIndex = explicitZIndex(node);
+      if (isFixedShellSourceNode(node) && nodeIndex !== null) {
+        maxIndex = maxIndex === null ? nodeIndex : Math.max(maxIndex, nodeIndex);
+      }
+
+      const descendantChildren = node.children || [];
+      for (let index = 0; index < descendantChildren.length; index++) {
+        visitDescendant(descendantChildren[index]);
+      }
+    }
+
+    for (let index = 0; index < children.length; index++) {
+      visitDescendant(children[index]);
+    }
+
+    return maxIndex;
+  }
+
+  function orderedRenderableChildren(sourceNode, options) {
+    const entries = [];
+    let sourceOrder = 0;
+
+    function visit(node, inheritedStackingIndex) {
+      if (shouldDropSourceNode(node)) return;
+
+      const ownStackingIndex = explicitZIndex(node);
+      const stackingIndex = inheritedStackingIndex === null
+        ? ownStackingIndex
+        : inheritedStackingIndex;
+      const order = sourceOrder++;
+
+      if (shouldFlattenFrameNode(node, options)) {
+        for (const child of (node && node.children) || []) {
+          visit(child, stackingIndex);
+        }
+        return;
+      }
+
+      const descendantStackingIndex = stackingIndex === null ? fixedDescendantStackingIndex(node) : null;
+      entries.push({
+        node,
+        stackingIndex:
+          stackingIndex === null
+            ? descendantStackingIndex === null
+              ? 0
+              : descendantStackingIndex
+            : stackingIndex,
+        order,
+      });
+    }
+
+    for (const child of (sourceNode && sourceNode.children) || []) {
+      visit(child, null);
+    }
+
+    return entries
+      .sort((left, right) => {
+        if (left.stackingIndex !== right.stackingIndex) {
+          return left.stackingIndex - right.stackingIndex;
+        }
+        return left.order - right.order;
+      })
+      .map((entry) => entry.node);
+  }
+
+  function rectExtendsOutsideHorizontally(rect, bounds) {
+    return rect.x < bounds.x || rect.x + rect.width > bounds.x + bounds.width;
+  }
+
+  function sourceRole(sourceNode) {
+    const source = (sourceNode && sourceNode.source) || {};
+    return String((sourceNode && sourceNode.role) || source.role || "").toLowerCase();
+  }
+
+  function containsRenderableMedia(sourceNode) {
+    if (!sourceNode) return false;
+    const nodeType = sourceNode.kind || sourceNode.type;
+    const style = sourceNode.style || {};
+    const design = sourceNode.design || {};
+    if (
+      nodeType === "image" ||
+      nodeType === "raster" ||
+      nodeType === "svg" ||
+      sourceNode.assetId ||
+      style.backgroundAssetId
+    ) {
+      return true;
+    }
+    if (Array.isArray(design.fills) && design.fills.some((fill) => fill && fill.type === "image")) {
+      return true;
+    }
+    return ((sourceNode && sourceNode.children) || []).some(containsRenderableMedia);
+  }
+
+  function containsSemanticListItem(sourceNode) {
+    for (const child of (sourceNode && sourceNode.children) || []) {
+      const tag = inferredTag(child);
+      if (tag === "li" || sourceRole(child) === "listitem" || containsSemanticListItem(child)) return true;
+    }
+    return false;
+  }
+
+  function isOverflowContentCandidate(sourceNode, rootRect) {
+    const rect = rectOf(sourceNode);
+    if (!rectExtendsOutsideHorizontally(rect, rootRect)) return false;
+    if (rect.width < 96 || rect.height < 64) return false;
+    if (!containsRenderableMedia(sourceNode)) return false;
+
+    const tag = inferredTag(sourceNode);
+    const role = sourceRole(sourceNode);
+    const semanticItem = tag === "li" || tag === "article" || tag === "figure" || role === "listitem";
+    const genericCard =
+      (sourceNode.kind || sourceNode.type) === "frame" &&
+      hasClassWord(sourceNode, /(?:carousel|gallery|slide|card|tile|media)/i) &&
+      !containsSemanticListItem(sourceNode);
+    return semanticItem || genericCard;
+  }
+
+  function collectOverflowContent(sourceRoot, rootRect) {
+    const candidates = [];
+
+    function visit(sourceNode) {
+      if (!sourceNode || shouldDropSourceNode(sourceNode)) return;
+      if (isOverflowContentCandidate(sourceNode, rootRect)) {
+        candidates.push(sourceNode);
+        return;
+      }
+      for (const child of sourceNode.children || []) visit(child);
+    }
+
+    for (const child of (sourceRoot && sourceRoot.children) || []) visit(child);
+    return candidates;
+  }
+
+  function layoutOverflowContent(sourceNodes, availableWidth, gap) {
+    const entries = [];
+    const maxWidth = Math.max(320, number(availableWidth, 960));
+    const spacing = Math.max(0, number(gap, 32));
+    let x = 0;
+    let y = 0;
+    let rowHeight = 0;
+    let usedWidth = 0;
+
+    for (const sourceNode of sourceNodes || []) {
+      const rect = rectOf(sourceNode);
+      if (x > 0 && x + rect.width > maxWidth) {
+        x = 0;
+        y += rowHeight + spacing;
+        rowHeight = 0;
+      }
+
+      entries.push({ sourceNode, x, y, rect });
+      x += rect.width + spacing;
+      rowHeight = Math.max(rowHeight, rect.height);
+      usedWidth = Math.max(usedWidth, x - spacing);
+    }
+
+    return {
+      entries,
+      width: Math.max(1, Math.min(maxWidth, usedWidth || maxWidth)),
+      height: Math.max(1, y + rowHeight),
+    };
+  }
+
   function hasVisuallyHiddenMarker(value) {
     return /(^|\s)(visuallyhidden|visually-hidden|sr-only|screenreader|screen-reader|a11y-hidden|u-hidden)(\s|$)/i.test(
       String(value || "")
@@ -1225,7 +1964,7 @@
     const rect = rectOf(sourceNode);
     const text = trackCreatedNode(options, figma.createText());
     text.name = semanticName(sourceNode, "Text");
-    text.fontName = await loadFont(figma, sourceNode, (options && options.fallbackFont) || DEFAULT_FONT);
+    text.fontName = await loadFont(figma, sourceNode, options || {});
     text.characters = String((sourceNode && sourceNode.text) || "");
     const designText = sourceNode && sourceNode.design && sourceNode.design.text ? sourceNode.design.text : {};
     if (designText.fontSize || (sourceNode && sourceNode.style && sourceNode.style.fontSize)) {
@@ -1273,6 +2012,7 @@
 
     return createSvgNode(
       figma,
+      scene,
       {
         kind: "svg",
         name: sourceNode && sourceNode.name,
@@ -1367,12 +2107,13 @@
     return imageNode;
   }
 
-  function createSvgNode(figma, sourceNode, parentRect, options) {
+  function createSvgNode(figma, scene, sourceNode, parentRect, options) {
     const rect = rectOf(sourceNode);
+    const svg = normalizeSvgForFigma(sourceNode && sourceNode.svg, scene, sourceNode);
     const vector = trackCreatedNode(
       options,
       typeof figma.createNodeFromSvg === "function"
-        ? figma.createNodeFromSvg(String(sourceNode.svg || "<svg />"))
+        ? figma.createNodeFromSvg(svg)
         : figma.createFrame()
     );
     vector.name = semanticName(sourceNode, "Vector");
@@ -1425,7 +2166,7 @@
       }
 
       if (nodeType === "svg") {
-        return createSvgNode(figma, sourceNode, parentRect, options);
+        return createSvgNode(figma, scene, sourceNode, parentRect, options);
       }
 
       const frame = createFrame(figma, sourceNode, parentRect, options);
@@ -1438,8 +2179,8 @@
         append(frame, await createText(figma, inlineText, frameRect, options));
         return frame;
       }
-      for (const child of (sourceNode && sourceNode.children) || []) {
-        appendAll(frame, await createNodes(figma, scene, child, frameRect, options));
+      for (const child of orderedRenderableChildren(sourceNode, options)) {
+        append(frame, await createNode(figma, scene, child, frameRect, options));
       }
       return frame;
     } catch (error) {
@@ -1448,22 +2189,37 @@
     }
   }
 
-  async function createNodes(figma, scene, sourceNode, parentRect, options) {
-    if (shouldDropSourceNode(sourceNode)) return [];
+  async function createOverflowContentFrame(figma, scene, sourceRoot, rootRect, options) {
+    const sourceNodes = collectOverflowContent(sourceRoot, rootRect);
+    if (!sourceNodes.length) return null;
 
-    if (shouldFlattenFrameNode(sourceNode, options)) {
-      const nodes = [];
-      const children = (sourceNode && sourceNode.children) || [];
-      for (let index = 0; index < children.length; index++) {
-        const childNodes = await createNodes(figma, scene, children[index], parentRect, options);
-        for (let childIndex = 0; childIndex < childNodes.length; childIndex++) {
-          nodes.push(childNodes[childIndex]);
-        }
-      }
-      return nodes;
+    const layout = layoutOverflowContent(sourceNodes, rootRect.width, 32);
+    const overflowFrame = trackCreatedNode(options, figma.createFrame());
+    overflowFrame.name = "Captured overflow content";
+    clearDefaultFill(overflowFrame);
+    overflowFrame.x = rootRect.x + rootRect.width + 96;
+    overflowFrame.y = rootRect.y;
+    overflowFrame.resize(layout.width, layout.height);
+    overflowFrame.clipsContent = false;
+
+    for (let index = 0; index < layout.entries.length; index++) {
+      const entry = layout.entries[index];
+      progress(options, "creating-overflow-content", {
+        current: index + 1,
+        total: layout.entries.length,
+      });
+      if (isCancelled(options)) return overflowFrame;
+
+      const placementRect = {
+        x: entry.rect.x - entry.x,
+        y: entry.rect.y - entry.y,
+        width: entry.rect.width,
+        height: entry.rect.height,
+      };
+      append(overflowFrame, await createNode(figma, scene, entry.sourceNode, placementRect, options));
     }
 
-    return [await createNode(figma, scene, sourceNode, parentRect, options)];
+    return overflowFrame;
   }
 
   async function importSceneToFigma(scene, options = {}) {
@@ -1477,6 +2233,7 @@
       throw new Error("Capture scene is missing a root node");
     }
 
+    normalizeFixedShellOverlaps(scene);
     const rootRect = rectOf(sourceRoot);
     progress(options, "import-started", { totalNodes: (sourceRoot.children || []).length + 1 });
     const importOptions = {};
@@ -1489,6 +2246,7 @@
     importOptions.scene = scene;
 
     const rootFrame = trackCreatedNode(importOptions, figma.createFrame());
+    let overflow = null;
     try {
       rootFrame.name = rootName(scene, sourceRoot);
       clearDefaultFill(rootFrame);
@@ -1501,7 +2259,7 @@
       const rootBackground = createBackgroundAssetNode(figma, scene, sourceRoot, rootRect, importOptions);
       if (rootBackground) append(rootFrame, rootBackground);
       appendSideStrokeNodes(figma, rootFrame, sourceRoot, rootRect, importOptions);
-      const children = sourceRoot.children || [];
+      const children = orderedRenderableChildren(sourceRoot, importOptions);
       for (let index = 0; index < children.length; index++) {
         progress(options, "creating-nodes", { current: index + 1, total: children.length });
         if (isCancelled(options)) {
@@ -1509,11 +2267,15 @@
           return { ok: false, cancelled: true, root: rootFrame };
         }
         const child = children[index];
-        appendAll(rootFrame, await createNodes(figma, scene, child, rootRect, importOptions));
+        append(rootFrame, await createNode(figma, scene, child, rootRect, importOptions));
         if (isCancelled(options)) {
           cleanupCancelled(figma, rootFrame, importOptions);
           return { ok: false, cancelled: true, root: rootFrame };
         }
+      }
+
+      if (importOptions.overflowMode === "sidecar") {
+        overflow = await createOverflowContentFrame(figma, scene, sourceRoot, rootRect, importOptions);
       }
 
       focusResult(figma, rootFrame);
@@ -1525,7 +2287,7 @@
       throw error;
     }
 
-    return { ok: true, root: rootFrame };
+    return { ok: true, root: rootFrame, overflow };
   }
 
   return {
@@ -1575,6 +2337,7 @@
       const result = await runtimeRoot.WebToFigmaImporter.importSceneToFigma(message.payload, {
         figma: figmaApi,
         layoutMode: message.layoutMode || "visual",
+        overflowMode: message.overflowMode || "sidecar",
         fallbackFont: message.fallbackFont || { family: "Inter", style: "Regular" },
         shouldCancel: () => cancelled,
         onProgress: (event) => {

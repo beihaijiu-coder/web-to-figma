@@ -6,6 +6,7 @@
   const STORAGE_CONCURRENCY_KEY = "proxyFetchConcurrency";
   const STORAGE_QUALITY_KEY = "captureQualityMode";
   const PROGRESS_EVENT = "__FIGMA_CAPTURE_PROGRESS__";
+  const STOP_SCROLL_KEY = "__FIGMA_CAPTURE_STOP_SCROLL_REQUESTED__";
   const DEFAULT_CONCURRENCY = "8";
   const DEFAULT_QUALITY = "standard";
   const ALLOWED = new Set(["4", "6", "8", "10", "12", "16", "20", "infinite"]);
@@ -326,6 +327,28 @@
         box-shadow: none;
       }
 
+      #${ROOT_ID} .capture.continue {
+        grid-column: 1 / -1;
+        background: #eef6ff;
+        color: #075985;
+      }
+
+      #${ROOT_ID} .capture.continue:hover {
+        background: #dff0ff;
+        box-shadow: none;
+      }
+
+      #${ROOT_ID} .capture.stop-scroll {
+        grid-column: 1 / -1;
+        background: #fff7ed;
+        color: #9a3412;
+      }
+
+      #${ROOT_ID} .capture.stop-scroll:hover {
+        background: #ffedd5;
+        box-shadow: none;
+      }
+
       #${ROOT_ID} .capture:active {
         transform: translateY(1px);
       }
@@ -410,6 +433,8 @@
         <div class="actions" data-figma-capture-ignore="1">
           <button class="capture" id="figmaCaptureBtn" type="button" data-figma-capture-ignore="1">捕获当前网页</button>
           <button class="capture secondary" id="figmaSelectBtn" type="button" data-figma-capture-ignore="1">选择组件</button>
+          <button class="capture stop-scroll hidden" id="figmaStopScrollBtn" type="button" data-figma-capture-ignore="1">停止滚动并生成</button>
+          <button class="capture continue hidden" id="figmaContinueFlowBtn" type="button" data-figma-capture-ignore="1">继续采集下一段</button>
         </div>
       </div>
     `;
@@ -424,8 +449,10 @@
     const map = {
       preparing: "准备页面...",
       scrolling: "正在滚动页面加载图片...",
+      "scroll-stopped": "已停止滚动，正在整理当前已加载内容...",
       "loading-images": `正在等待图片加载... 已发现 ${detail.imagesDiscovered ?? 0} 张`,
       "loading-fonts": "正在等待字体加载...",
+      "continuous-content": `检测到连续内容流，正在整理第 ${detail.segmentIndex ?? 1} 段...`,
       capturing: "正在生成转换数据...",
     };
 
@@ -723,12 +750,17 @@
   const concurrencyRow = root.querySelector("#figmaConcurrencyRow");
   const captureBtn = root.querySelector("#figmaCaptureBtn");
   const selectBtn = root.querySelector("#figmaSelectBtn");
+  const stopScrollBtn = root.querySelector("#figmaStopScrollBtn");
+  const continueFlowBtn = root.querySelector("#figmaContinueFlowBtn");
   const copyCard = root.querySelector("#figmaCopyCard");
   const copyBtn = root.querySelector("#figmaCopyBtn");
   const copyJsonBtn = root.querySelector("#figmaCopyJsonBtn");
   const copyDescription = root.querySelector("#figmaCopyDescription");
   const status = root.querySelector("#figmaCaptureStatus");
   let pendingCopyPayload = null;
+  let pendingContentFlow = null;
+  let stopScrollAvailable = false;
+  let stopScrollRequested = false;
 
   function setStatus(text, tone = "") {
     status.textContent = text || "";
@@ -743,8 +775,26 @@
     toggle.disabled = busy;
     concurrency.disabled = busy;
     selectBtn.disabled = busy;
+    stopScrollBtn.disabled = !stopScrollAvailable || stopScrollRequested;
+    continueFlowBtn.disabled = busy || !pendingContentFlow;
     copyBtn.disabled = busy || !pendingCopyPayload;
     copyJsonBtn.disabled = busy || !pendingCopyPayload;
+  }
+
+  function setStopScrollAvailable(available) {
+    stopScrollAvailable = Boolean(available);
+    stopScrollBtn.classList.toggle("hidden", !stopScrollAvailable);
+    stopScrollBtn.disabled = !stopScrollAvailable || stopScrollRequested;
+    stopScrollBtn.textContent = stopScrollRequested ? "正在停止滚动..." : "停止滚动并生成";
+  }
+
+  function setContinueFlow(flow) {
+    pendingContentFlow = flow && flow.isSegment && flow.hasMore ? flow : null;
+    continueFlowBtn.classList.toggle("hidden", !pendingContentFlow);
+    continueFlowBtn.disabled = !pendingContentFlow;
+    if (pendingContentFlow) {
+      continueFlowBtn.textContent = `继续采集第 ${pendingContentFlow.segmentIndex + 1} 段`;
+    }
   }
 
   function setCopyCard(visible, text) {
@@ -754,8 +804,30 @@
     copyJsonBtn.disabled = !pendingCopyPayload;
   }
 
-  function startCapture(selector = "body") {
+  function flowCopyText(flow) {
+    if (!flow || !flow.isSegment) return "Copied as SVG. Go to the Figma canvas and press Ctrl/Cmd+V.";
+    if (flow.stoppedByUser) return "已按停止位置复制当前已加载内容。";
+    return flow.hasMore
+      ? `已复制内容流第 ${flow.segmentIndex} 段。可先导入 Figma，再继续采集下一段。`
+      : `已复制内容流第 ${flow.segmentIndex} 段。页面已到达结尾。`;
+  }
+
+  function flowStatusText(flow, summary) {
+    if (!flow || !flow.isSegment) return summary;
+    const base = flow.stoppedByUser
+      ? "已按停止位置采集当前已加载内容。"
+      : flow.hasMore
+      ? `检测到连续内容流，已采集第 ${flow.segmentIndex} 段。`
+      : `连续内容流第 ${flow.segmentIndex} 段已采集，页面已到达结尾。`;
+    return `${base}${summary === "已复制转换结果。" ? "" : summary}`;
+  }
+
+  function startCapture(selector = "body", contentFlow = { action: "auto" }) {
     pendingCopyPayload = null;
+    stopScrollRequested = false;
+    window[STOP_SCROLL_KEY] = false;
+    setStopScrollAvailable(false);
+    setContinueFlow(null);
     setCopyCard(false);
     setBusy(true);
     setStatus(selector === "body" ? "准备开始采集..." : `准备采集：${selector}`);
@@ -765,9 +837,11 @@
         options: {
           qualityMode: normalizeQuality(quality.value),
           selector,
+          contentFlow,
         },
       },
       (res) => {
+        setStopScrollAvailable(false);
         setBusy(false);
         const err = chrome.runtime.lastError;
         if (err) {
@@ -786,11 +860,15 @@
         copyCanvasSvgForFigma(res.payload)
           .then(() => {
             pendingCopyPayload = res.payload;
+            const flow = res.payload?.capture?.contentFlow || null;
+            setContinueFlow(flow);
             const summary = summarizeDiagnostics(res.diagnostics);
-            setCopyCard(true, "Copied as SVG. Go to the Figma canvas and press Ctrl/Cmd+V.");
+            setCopyCard(true, flowCopyText(flow));
             setBusy(false);
             setStatus(
-              summary === "已复制转换结果。"
+              flow
+                ? flowStatusText(flow, summary)
+                : summary === "已复制转换结果。"
                 ? "已复制为 SVG，请回到 Figma 画布直接粘贴。"
                 : `已复制为 SVG，请回到 Figma 画布直接粘贴。${summary}`,
               "success"
@@ -798,6 +876,9 @@
           })
           .catch((error) => {
             pendingCopyPayload = res.payload;
+            const flow = res.payload?.capture?.contentFlow || null;
+            setContinueFlow(flow);
+            setStopScrollAvailable(false);
             setCopyCard(true, "Automatic SVG copy failed. Click Copy to place SVG on your clipboard.");
             captureBtn.textContent = "复制结果";
             setStatus(`采集完成，但自动复制失败：${error.message || error}。请点击“复制结果”。`);
@@ -976,12 +1057,42 @@
   });
 
   window.addEventListener(PROGRESS_EVENT, (event) => {
-    setStatus(progressText(event.detail?.stage, event.detail || {}));
+    const detail = event.detail || {};
+    const stage = detail.stage;
+    if (stage === "scrolling" && detail.canStopScroll) {
+      setStopScrollAvailable(true);
+    } else if (stage && stage !== "scrolling") {
+      setStopScrollAvailable(false);
+    }
+
+    if (stage === "scrolling" && stopScrollRequested) {
+      setStatus("已收到停止指令，正在生成当前已加载内容...");
+      return;
+    }
+
+    setStatus(progressText(stage, detail));
   });
 
   captureBtn.addEventListener("click", () => {
     if (copyPendingPayload()) return;
     startCapture("body");
+  });
+
+  continueFlowBtn.addEventListener("click", () => {
+    if (!pendingContentFlow) return;
+    startCapture("body", {
+      action: "next",
+      segmentScreens: pendingContentFlow.segmentScreens,
+    });
+  });
+
+  stopScrollBtn.addEventListener("click", () => {
+    if (!stopScrollAvailable || stopScrollRequested) return;
+    stopScrollRequested = true;
+    window[STOP_SCROLL_KEY] = true;
+    stopScrollBtn.disabled = true;
+    stopScrollBtn.textContent = "正在停止滚动...";
+    setStatus("已停止滚动，正在生成当前已加载内容...");
   });
 
   copyBtn.addEventListener("click", () => {
