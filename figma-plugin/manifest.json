@@ -6,7 +6,12 @@
   "ui": "ui/index.html",
   "editorType": ["figma"],
   "networkAccess": {
-    "allowedDomains": ["http://localhost:8787"],
-    "devAllowedDomains": ["http://localhost:8787", "http://localhost:4173"]
+    "allowedDomains": ["none"],
+    "devAllowedDomains": [
+      "http://127.0.0.1:8787",
+      "http://localhost:8787",
+      "http://127.0.0.1:4173",
+      "http://localhost:4173"
+    ]
   }
 }

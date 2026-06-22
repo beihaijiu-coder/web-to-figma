@@ -51,8 +51,15 @@ test("Figma plugin UI stays focused on import progress without commercial/report
   assert.deepEqual(manifest.editorType, ["figma"]);
   assert.equal(manifest.main, "src/importer.js");
   assert.equal(manifest.ui, "ui/index.html");
+  assert.deepEqual(manifest.networkAccess.allowedDomains, ["none"]);
+  assert.equal(
+    manifest.networkAccess.allowedDomains.some((domain) => /localhost|127\.0\.0\.1/.test(domain)),
+    false
+  );
   assert.deepEqual(manifest.networkAccess.devAllowedDomains, [
+    "http://127.0.0.1:8787",
     "http://localhost:8787",
+    "http://127.0.0.1:4173",
     "http://localhost:4173",
   ]);
   assert.equal(ui.includes("Import clipboard capture"), true);
