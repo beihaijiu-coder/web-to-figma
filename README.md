@@ -6,6 +6,7 @@
 
 - `chrome-extension/`：桌面 Chrome 采集端。用该目录中的 `manifest.json` 加载已解压的扩展程序。
 - `figma-plugin/`：Figma 导入端。
+- `api/`：TypeScript 业务 API；保存内部用户、权益、额度和后续任务中转状态。
 - `marketing-site/`：独立静态官网；域名确定后生成 canonical、robots 与 sitemap。
 - `tests/`：按交付物和端到端流程组织的测试。
 - `docs/`：产品、PRD、架构决策与工程指引。
@@ -17,8 +18,14 @@ npm test
 npm run test:extension
 npm run test:figma
 npm run test:site
+npm run test:api
+npm run check:api
+npm run migrate:api
+npm run dev:api
 npm run package:extension
 SITE_URL=https://example.com npm run build:site
 ```
 
 `package:extension` 会在 `dist/chrome-extension/` 生成可用于 Chrome「加载已解压的扩展程序」的目录。`build:site` 只接受 HTTPS 根 URL，避免临时地址进入 canonical、robots 或 sitemap。
+
+API 的本地密钥、设备连接和转换中转说明见 [`api/README.md`](api/README.md)。真实 Neon 迁移必须在 `api/.env.local` 填入开发分支的 `DATABASE_URL` 后才运行。

@@ -1,11 +1,19 @@
 {
   "name": "web-to-figma",
   "private": true,
+  "workspaces": [
+    "api"
+  ],
   "scripts": {
-    "test": "node --test",
+    "test": "node --test tests/chrome-extension/*.test.mjs tests/figma-plugin/*.test.mjs tests/marketing-site/*.test.mjs tests/e2e/*.test.mjs && npm run test:api",
+    "test:api": "npm run test --workspace @web-to-figma/api",
     "test:extension": "node --test tests/chrome-extension/*.test.mjs tests/e2e/packaging.test.mjs",
     "test:figma": "node --test tests/figma-plugin/*.test.mjs",
     "test:site": "node --test tests/marketing-site/*.test.mjs",
+    "dev:api": "npm run dev --workspace @web-to-figma/api",
+    "build:api": "npm run build --workspace @web-to-figma/api",
+    "check:api": "npm run check --workspace @web-to-figma/api",
+    "migrate:api": "npm run migrate --workspace @web-to-figma/api",
     "build:site": "node marketing-site/build.mjs --site-url \"$SITE_URL\"",
     "package:extension": "node scripts/package-extension.mjs"
   }
