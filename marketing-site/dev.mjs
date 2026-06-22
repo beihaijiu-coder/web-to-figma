@@ -8,7 +8,8 @@ import { buildMarketingSite } from './build.mjs';
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.join(directory, '..');
 const outputDirectory = path.join(directory, 'dist-dev');
-const host = '127.0.0.1';
+const host = process.env.MARKETING_SITE_HOST || undefined;
+const displayHost = process.env.MARKETING_SITE_HOST || 'localhost';
 const port = 4173;
 
 try {
@@ -20,7 +21,7 @@ try {
 await buildMarketingSite({
   siteUrl: 'https://local.web-to-figma.invalid',
   outputDirectory,
-  apiBaseUrl: process.env.WEB_TO_FIGMA_API_BASE_URL || 'http://localhost:8787',
+  apiBaseUrl: process.env.WEB_TO_FIGMA_API_BASE_URL || 'http://127.0.0.1:8787',
   clerkPublishableKey: process.env.CLERK_PUBLISHABLE_KEY,
   clerkFrontendApiUrl: process.env.CLERK_FRONTEND_API_URL,
 });
@@ -57,5 +58,5 @@ createServer(async (request, response) => {
     response.end('Not found');
   }
 }).listen(port, host, () => {
-  console.log(`Web to Figma local website: http://localhost:${port}`);
+  console.log(`Web to Figma local website: http://${displayHost}:${port}`);
 });
