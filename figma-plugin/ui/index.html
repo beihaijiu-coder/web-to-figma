@@ -164,6 +164,36 @@
       gap: 10px;
     }
 
+    .account-panel {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+      background: rgba(15, 23, 42, 0.34);
+    }
+
+    .account-title {
+      margin: 0;
+      color: #e5e7eb;
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    .account-status {
+      min-height: 18px;
+      margin: 0;
+      color: #9ca3af;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .button-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+    }
+
     .field,
     .select {
       width: 100%;
@@ -192,7 +222,8 @@
 
     .primary,
     .secondary,
-    .danger {
+    .danger,
+    .neutral {
       border: 0;
       border-radius: 12px;
       padding: 12px 14px;
@@ -215,9 +246,16 @@
       color: #34d399;
     }
 
+    .neutral {
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background: transparent;
+      color: #d1d5db;
+    }
+
     .primary:disabled,
     .secondary:disabled,
-    .danger:disabled {
+    .danger:disabled,
+    .neutral:disabled {
       opacity: 0.55;
       cursor: default;
     }
@@ -323,6 +361,15 @@
         <option value="show">3. 展开全部已采集内容</option>
       </select>
       <input id="fallbackFont" class="field" placeholder="Fallback font, e.g. Inter" value="Inter" />
+      <section class="account-panel" aria-label="Account connection">
+        <p class="account-title">Account connection · dev</p>
+        <input id="apiBaseUrl" class="field" placeholder="API URL" value="http://localhost:8787" />
+        <div class="button-row">
+          <button id="connectAccountBtn" class="secondary" type="button">Connect account</button>
+          <button id="disconnectAccountBtn" class="neutral" type="button">Disconnect</button>
+        </div>
+        <p id="accountStatus" class="account-status" aria-live="polite"></p>
+      </section>
       <button id="importClipboardBtn" class="primary" type="button">Import clipboard capture</button>
       <textarea id="manualCaptureInput" class="field capture-input hidden" placeholder="Paste Chrome capture JSON here"></textarea>
       <input id="urlInput" class="field" placeholder="Or enter URL to open in Chrome" />
@@ -361,7 +408,101 @@
     const fallbackFont = document.getElementById("fallbackFont");
     const urlInput = document.getElementById("urlInput");
     const manualCaptureInput = document.getElementById("manualCaptureInput");
+    const apiBaseUrl = document.getElementById("apiBaseUrl");
+    const connectAccountBtn = document.getElementById("connectAccountBtn");
+    const disconnectAccountBtn = document.getElementById("disconnectAccountBtn");
+    const accountStatus = document.getElementById("accountStatus");
     let lastPayload = null;
+    let deviceAuth = null;
+    let accountBusy = false;
+
+    function postToMain(message) {
+      parent.postMessage({ pluginMessage: message }, "*");
+    }
+
+    function setAccountStatus(text) {
+      accountStatus.textContent = text || "";
+    }
+
+    function setAccountBusy(busy) {
+      accountBusy = busy;
+      connectAccountBtn.disabled = busy;
+      disconnectAccountBtn.disabled = busy;
+    }
+
+    function normalizeApiBaseUrl(rawValue) {
+      const url = new URL(String(rawValue || "http://localhost:8787").trim());
+      if (url.protocol !== "http:" && url.protocol !== "https:") {
+        throw new Error("API URL must start with http:// or https://.");
+      }
+      return url.origin;
+    }
+
+    async function apiJson(path, options = {}) {
+      const baseUrl = normalizeApiBaseUrl(apiBaseUrl.value);
+      const headers = { Accept: "application/json" };
+      if (options.body !== undefined) headers["Content-Type"] = "application/json";
+      if (options.accessToken) headers.Authorization = `Bearer ${options.accessToken}`;
+
+      const response = await fetch(`${baseUrl}${path}`, {
+        method: options.method || "GET",
+        headers,
+        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      });
+      const body = await response.json().catch(() => ({}));
+      const accepted = options.acceptedStatuses || [200];
+      if (!accepted.includes(response.status)) {
+        throw new Error(body?.error?.message || `API request failed: HTTP ${response.status}`);
+      }
+      return { status: response.status, body };
+    }
+
+    function tokenExpiry(seconds) {
+      return Date.now() + Math.max(0, Number(seconds || 0)) * 1000;
+    }
+
+    function saveDeviceAuth(tokens) {
+      deviceAuth = {
+        apiBaseUrl: normalizeApiBaseUrl(apiBaseUrl.value),
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        accessTokenExpiresAt: tokenExpiry(tokens.expiresIn),
+        refreshTokenExpiresAt: tokenExpiry(tokens.refreshExpiresIn),
+      };
+      postToMain({ type: "save-device-auth", ...deviceAuth });
+    }
+
+    async function refreshDeviceAuth(auth) {
+      if (!auth?.refreshToken || Number(auth.refreshTokenExpiresAt || 0) <= Date.now()) return false;
+      apiBaseUrl.value = auth.apiBaseUrl || apiBaseUrl.value;
+      const result = await apiJson("/v1/tokens/refresh", {
+        method: "POST",
+        body: { refreshToken: auth.refreshToken },
+      });
+      saveDeviceAuth(result.body);
+      return true;
+    }
+
+    async function pollDeviceConnection(deviceCode, intervalSeconds, expiresInSeconds) {
+      const expiresAt = Date.now() + Math.max(30, Number(expiresInSeconds || 600)) * 1000;
+      let intervalMs = Math.max(3, Number(intervalSeconds || 5)) * 1000;
+
+      while (Date.now() < expiresAt) {
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+        const result = await apiJson("/v1/device-connections/token", {
+          method: "POST",
+          body: { deviceCode },
+          acceptedStatuses: [200, 202, 429],
+        });
+        if (result.status === 200) {
+          saveDeviceAuth(result.body);
+          return true;
+        }
+        if (result.body?.interval) intervalMs = Math.max(3, Number(result.body.interval)) * 1000;
+      }
+
+      throw new Error("Connection request expired.");
+    }
 
     function fallbackFontName() {
       return { family: fallbackFont.value.trim() || "Inter", style: "Regular" };
@@ -474,6 +615,41 @@
       return navigator.clipboard.readText();
     }
 
+    connectAccountBtn.onclick = async () => {
+      if (accountBusy) return;
+      setAccountBusy(true);
+      setAccountStatus("Creating connection request...");
+      try {
+        apiBaseUrl.value = normalizeApiBaseUrl(apiBaseUrl.value);
+        const result = await apiJson("/v1/device-connections", {
+          method: "POST",
+          body: {
+            clientType: "figma_plugin",
+            requestedClientName: "Figma plugin",
+          },
+          acceptedStatuses: [201],
+        });
+        postToMain({ type: "open-external", url: result.body.verificationUriComplete });
+        setAccountStatus(`Browser opened. Confirm code ${result.body.userCode}.`);
+        await pollDeviceConnection(
+          result.body.deviceCode,
+          result.body.interval,
+          result.body.expiresIn
+        );
+        setAccountStatus("Connected. This Figma plugin can receive tasks.");
+      } catch (error) {
+        setAccountStatus(error.message || String(error));
+      } finally {
+        setAccountBusy(false);
+      }
+    };
+
+    disconnectAccountBtn.onclick = () => {
+      deviceAuth = null;
+      postToMain({ type: "clear-device-auth" });
+      setAccountStatus("Disconnected on this Figma plugin.");
+    };
+
     document.getElementById("importClipboardBtn").onclick = async () => {
       if (tryImportManualCapture()) return;
 
@@ -545,6 +721,29 @@
       const msg = event.data.pluginMessage;
       if (!msg) return;
 
+      if (msg.type === "device-auth") {
+        if (!msg.auth) {
+          setAccountStatus("Not connected.");
+          return;
+        }
+
+        refreshDeviceAuth(msg.auth)
+          .then((connected) => {
+            setAccountStatus(connected ? "Connected." : "Connection expired. Please connect again.");
+          })
+          .catch((error) => {
+            deviceAuth = null;
+            postToMain({ type: "clear-device-auth" });
+            setAccountStatus(error.message || String(error));
+          });
+        return;
+      }
+
+      if (msg.type === "device-auth-cleared") {
+        setAccountStatus("Not connected.");
+        return;
+      }
+
       if (msg.type === "import-progress") {
         if (msg.stage === "import-started") setProgress("structure", 34, "Import page structure...");
         if (msg.stage === "creating-nodes") setProgress("images", 66, "Import image resources...");
@@ -557,7 +756,7 @@
       }
 
       if (msg.type === "import-cancelled") {
-        showStart("Cancelled. Partial layers were kept in Figma.");
+        showStart("Cancelled. Partial layers were removed from Figma.");
       }
 
       if (msg.type === "import-failed") {
@@ -568,6 +767,9 @@
         message.textContent = "Retry";
       }
     };
+
+    setAccountStatus("Checking connection...");
+    postToMain({ type: "get-device-auth" });
   </script>
 </body>
 </html>

@@ -27,6 +27,18 @@
       </select>
     </label>
     <p class="hint">默认关闭代理。并发仅影响开启代理后的图片抓取速度与稳定性。</p>
+    <section class="account">
+      <h2>账号连接（开发）</h2>
+      <label class="stack" for="apiBaseUrl">
+        <span>API 地址</span>
+        <input id="apiBaseUrl" type="url" value="http://localhost:8787" />
+      </label>
+      <div class="button-row">
+        <button id="connectAccountBtn" class="secondary" type="button">连接账号</button>
+        <button id="disconnectAccountBtn" class="ghost" type="button">断开</button>
+      </div>
+      <p id="cloudStatus" class="status" aria-live="polite"></p>
+    </section>
     <button id="captureBtn" type="button">捕获当前网页</button>
     <p id="status" class="status" aria-live="polite"></p>
   </main>

@@ -2326,6 +2326,7 @@
   }
 
   let cancelled = false;
+  const AUTH_STORAGE_KEY = "webToFigmaDeviceAuthV1";
 
   function post(type, payload = {}) {
     const message = { type: type };
@@ -2346,6 +2347,47 @@
 
     if (message.type === "close") {
       figmaApi.closePlugin();
+      return;
+    }
+
+    if (message.type === "open-external") {
+      if (message.url && figmaApi.openExternal) {
+        figmaApi.openExternal(message.url);
+        post("external-opened");
+      } else {
+        post("external-open-failed", { message: "Unable to open the browser." });
+      }
+      return;
+    }
+
+    if (message.type === "save-device-auth") {
+      if (figmaApi.clientStorage && figmaApi.clientStorage.setAsync) {
+        await figmaApi.clientStorage.setAsync(AUTH_STORAGE_KEY, {
+          apiBaseUrl: message.apiBaseUrl || "",
+          accessToken: message.accessToken || "",
+          refreshToken: message.refreshToken || "",
+          accessTokenExpiresAt: message.accessTokenExpiresAt || 0,
+          refreshTokenExpiresAt: message.refreshTokenExpiresAt || 0,
+        });
+      }
+      post("device-auth-saved");
+      return;
+    }
+
+    if (message.type === "get-device-auth") {
+      var storedAuth = null;
+      if (figmaApi.clientStorage && figmaApi.clientStorage.getAsync) {
+        storedAuth = await figmaApi.clientStorage.getAsync(AUTH_STORAGE_KEY);
+      }
+      post("device-auth", { auth: storedAuth || null });
+      return;
+    }
+
+    if (message.type === "clear-device-auth") {
+      if (figmaApi.clientStorage && figmaApi.clientStorage.setAsync) {
+        await figmaApi.clientStorage.setAsync(AUTH_STORAGE_KEY, null);
+      }
+      post("device-auth-cleared");
       return;
     }
 

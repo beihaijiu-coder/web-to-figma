@@ -1,6 +1,16 @@
 import { normalizeSceneAssetsForFigma } from "./core/asset-normalizer.mjs";
 import { normalizeFixedShellOverlaps } from "./core/app-shell-normalizer.mjs";
 import { visibleCaptureBounds } from "./core/screenshot-geometry.mjs";
+import {
+  DEFAULT_API_BASE_URL,
+  WebToFigmaApiError,
+  createDeviceConnection,
+  getDeviceMe,
+  listInstallations,
+  normalizeApiBaseUrl,
+  pollDeviceConnection,
+  refreshDeviceTokens,
+} from "./cloud-client.mjs";
 
 const WORLD = "ISOLATED";
 const CAPTURE_FILE = "src/scene-capture.js";
@@ -14,6 +24,13 @@ const FIGMA_CAPTURE_PROXY_DIAG_KEY = "figmaCaptureProxyDiagnosticsV1";
 const FIGMA_CAPTURE_PROXY_MAX_DIAG = 500;
 const FIGMA_CAPTURE_FETCH_TIMEOUT_MS = 8000;
 const FIGMA_CAPTURE_SCREENSHOT_FALLBACK_LIMIT = 12;
+const WEB_TO_FIGMA_API_BASE_URL_KEY = "webToFigmaApiBaseUrl";
+const WEB_TO_FIGMA_ACCESS_TOKEN_KEY = "webToFigmaAccessToken";
+const WEB_TO_FIGMA_ACCESS_TOKEN_EXPIRES_AT_KEY = "webToFigmaAccessTokenExpiresAt";
+const WEB_TO_FIGMA_REFRESH_TOKEN_KEY = "webToFigmaRefreshToken";
+const WEB_TO_FIGMA_REFRESH_TOKEN_EXPIRES_AT_KEY = "webToFigmaRefreshTokenExpiresAt";
+const WEB_TO_FIGMA_PENDING_CONNECTION_KEY = "webToFigmaPendingConnection";
+const WEB_TO_FIGMA_CLIENT_TYPE = "chrome_extension";
 
 const figmaProxyQueue = [];
 const figmaProxyInFlight = new Map();
@@ -27,6 +44,201 @@ let figmaProxyDiagnostics = [];
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function getCloudApiBaseUrl() {
+  try {
+    const data = await chrome.storage.local.get({
+      [WEB_TO_FIGMA_API_BASE_URL_KEY]: DEFAULT_API_BASE_URL,
+    });
+    return normalizeApiBaseUrl(data?.[WEB_TO_FIGMA_API_BASE_URL_KEY]);
+  } catch {
+    return DEFAULT_API_BASE_URL;
+  }
+}
+
+async function setCloudApiBaseUrl(rawValue) {
+  const normalized = normalizeApiBaseUrl(rawValue);
+  await chrome.storage.local.set({ [WEB_TO_FIGMA_API_BASE_URL_KEY]: normalized });
+  return normalized;
+}
+
+async function getCloudTokens() {
+  const sessionData = chrome.storage.session
+    ? await chrome.storage.session.get({
+        [WEB_TO_FIGMA_ACCESS_TOKEN_KEY]: null,
+        [WEB_TO_FIGMA_ACCESS_TOKEN_EXPIRES_AT_KEY]: 0,
+        [WEB_TO_FIGMA_REFRESH_TOKEN_KEY]: null,
+        [WEB_TO_FIGMA_REFRESH_TOKEN_EXPIRES_AT_KEY]: 0,
+      })
+    : {};
+
+  return {
+    accessToken: sessionData?.[WEB_TO_FIGMA_ACCESS_TOKEN_KEY] || null,
+    accessTokenExpiresAt: Number(sessionData?.[WEB_TO_FIGMA_ACCESS_TOKEN_EXPIRES_AT_KEY] || 0),
+    refreshToken: sessionData?.[WEB_TO_FIGMA_REFRESH_TOKEN_KEY] || null,
+    refreshTokenExpiresAt: Number(sessionData?.[WEB_TO_FIGMA_REFRESH_TOKEN_EXPIRES_AT_KEY] || 0),
+  };
+}
+
+async function saveCloudTokens(tokens) {
+  const now = Date.now();
+  const accessTokenExpiresAt = now + Math.max(0, Number(tokens.expiresIn || 0)) * 1_000;
+  const refreshTokenExpiresAt = now + Math.max(0, Number(tokens.refreshExpiresIn || 0)) * 1_000;
+
+  await Promise.all([
+    chrome.storage.session
+      ? chrome.storage.session.set({
+          [WEB_TO_FIGMA_ACCESS_TOKEN_KEY]: tokens.accessToken,
+          [WEB_TO_FIGMA_ACCESS_TOKEN_EXPIRES_AT_KEY]: accessTokenExpiresAt,
+          [WEB_TO_FIGMA_REFRESH_TOKEN_KEY]: tokens.refreshToken,
+          [WEB_TO_FIGMA_REFRESH_TOKEN_EXPIRES_AT_KEY]: refreshTokenExpiresAt,
+        })
+      : Promise.resolve(),
+  ]);
+}
+
+async function clearCloudTokens() {
+  await (
+    chrome.storage.session
+      ? chrome.storage.session.remove([
+          WEB_TO_FIGMA_ACCESS_TOKEN_KEY,
+          WEB_TO_FIGMA_ACCESS_TOKEN_EXPIRES_AT_KEY,
+          WEB_TO_FIGMA_REFRESH_TOKEN_KEY,
+          WEB_TO_FIGMA_REFRESH_TOKEN_EXPIRES_AT_KEY,
+          WEB_TO_FIGMA_PENDING_CONNECTION_KEY,
+        ])
+      : Promise.resolve()
+  );
+}
+
+async function getPendingCloudConnection() {
+  if (!chrome.storage.session) return null;
+  const data = await chrome.storage.session.get({ [WEB_TO_FIGMA_PENDING_CONNECTION_KEY]: null });
+  const pending = data?.[WEB_TO_FIGMA_PENDING_CONNECTION_KEY] || null;
+  if (!pending) return null;
+  if (Number(pending.expiresAt || 0) <= Date.now()) {
+    await chrome.storage.session.remove([WEB_TO_FIGMA_PENDING_CONNECTION_KEY]);
+    return null;
+  }
+  return pending;
+}
+
+async function savePendingCloudConnection(pending) {
+  if (!chrome.storage.session) return;
+  await chrome.storage.session.set({ [WEB_TO_FIGMA_PENDING_CONNECTION_KEY]: pending });
+}
+
+async function clearPendingCloudConnection() {
+  if (!chrome.storage.session) return;
+  await chrome.storage.session.remove([WEB_TO_FIGMA_PENDING_CONNECTION_KEY]);
+}
+
+async function refreshCloudAccessToken(baseUrl, refreshToken) {
+  const tokens = await refreshDeviceTokens({ baseUrl, refreshToken });
+  await saveCloudTokens(tokens);
+  return tokens.accessToken;
+}
+
+async function getCloudAccessToken(baseUrl) {
+  const tokens = await getCloudTokens();
+  const now = Date.now();
+  if (tokens.accessToken && tokens.accessTokenExpiresAt > now + 30_000) {
+    return tokens.accessToken;
+  }
+  if (!tokens.refreshToken || tokens.refreshTokenExpiresAt <= now) {
+    return null;
+  }
+
+  try {
+    return await refreshCloudAccessToken(baseUrl, tokens.refreshToken);
+  } catch {
+    await clearCloudTokens();
+    return null;
+  }
+}
+
+async function getCloudAccountStatus() {
+  const baseUrl = await getCloudApiBaseUrl();
+  const accessToken = await getCloudAccessToken(baseUrl);
+  const pendingConnection = await getPendingCloudConnection();
+  if (!accessToken) {
+    if (pendingConnection) {
+      try {
+        const result = await pollDeviceConnection({
+          baseUrl: pendingConnection.apiBaseUrl || baseUrl,
+          deviceCode: pendingConnection.deviceCode,
+        });
+        if (result.status === 200) {
+          await saveCloudTokens(result.body);
+          await clearPendingCloudConnection();
+          return getCloudAccountStatus();
+        }
+        if (result.body?.interval) {
+          pendingConnection.interval = result.body.interval;
+          await savePendingCloudConnection(pendingConnection);
+        }
+      } catch (error) {
+        if (error instanceof WebToFigmaApiError && error.status === 410) {
+          await clearPendingCloudConnection();
+        } else {
+          throw error;
+        }
+      }
+    }
+    return { ok: true, connected: false, apiBaseUrl: baseUrl, connection: pendingConnection };
+  }
+
+  try {
+    const [me, targets] = await Promise.all([
+      getDeviceMe({ baseUrl, accessToken }),
+      listInstallations({ baseUrl, accessToken, clientType: "figma_plugin" }),
+    ]);
+    return {
+      ok: true,
+      connected: true,
+      apiBaseUrl: baseUrl,
+      installation: me.installation,
+      figmaInstallations: targets.installations || [],
+      connection: pendingConnection,
+    };
+  } catch (error) {
+    if (error instanceof WebToFigmaApiError && error.status === 401) {
+      await clearCloudTokens();
+      return { ok: true, connected: false, apiBaseUrl: baseUrl, connection: pendingConnection };
+    }
+    throw error;
+  }
+}
+
+async function startCloudAccountConnection() {
+  const baseUrl = await getCloudApiBaseUrl();
+  const connection = await createDeviceConnection({
+    baseUrl,
+    clientType: WEB_TO_FIGMA_CLIENT_TYPE,
+    requestedClientName: "Chrome extension",
+  });
+
+  await chrome.tabs.create({ url: connection.verificationUriComplete });
+  await savePendingCloudConnection({
+    status: "pending",
+    apiBaseUrl: baseUrl,
+    deviceCode: connection.deviceCode,
+    userCode: connection.userCode,
+    interval: connection.interval,
+    expiresAt: Date.now() + Math.max(30, Number(connection.expiresIn) || 600) * 1_000,
+    verificationUriComplete: connection.verificationUriComplete,
+    startedAt: new Date().toISOString(),
+  });
+
+  return {
+    ok: true,
+    connected: false,
+    status: "pending",
+    apiBaseUrl: baseUrl,
+    userCode: connection.userCode,
+    verificationUriComplete: connection.verificationUriComplete,
+  };
 }
 
 async function injectScriptFile(tabId, file) {
@@ -584,6 +796,47 @@ chrome.action.onClicked.addListener(async (tab) => {
   } catch (error) {
     console.error("Toolbar inject failed:", error);
   }
+});
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (!msg || !String(msg.type || "").startsWith("WEB_TO_FIGMA_CLOUD_")) return;
+
+  (async () => {
+    try {
+      if (msg.type === "WEB_TO_FIGMA_CLOUD_SET_API_BASE_URL") {
+        const apiBaseUrl = await setCloudApiBaseUrl(msg.apiBaseUrl);
+        sendResponse({ ok: true, apiBaseUrl });
+        return;
+      }
+
+      if (msg.type === "WEB_TO_FIGMA_CLOUD_STATUS") {
+        sendResponse(await getCloudAccountStatus());
+        return;
+      }
+
+      if (msg.type === "WEB_TO_FIGMA_CLOUD_CONNECT") {
+        sendResponse(await startCloudAccountConnection());
+        return;
+      }
+
+      if (msg.type === "WEB_TO_FIGMA_CLOUD_DISCONNECT") {
+        await clearCloudTokens();
+        sendResponse({ ok: true, connected: false, apiBaseUrl: await getCloudApiBaseUrl() });
+        return;
+      }
+
+      sendResponse({ ok: false, error: "Unknown cloud command" });
+    } catch (error) {
+      sendResponse({
+        ok: false,
+        error: error?.message || String(error),
+        code: error?.code || "REQUEST_FAILED",
+        status: error?.status || 0,
+      });
+    }
+  })();
+
+  return true;
 });
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {

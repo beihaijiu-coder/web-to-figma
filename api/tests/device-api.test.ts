@@ -59,6 +59,53 @@ test("device connection API creates, approves, exchanges, and refreshes installa
   assert.equal(refreshResponse.statusCode, 200);
   assert.match(refreshResponse.json().accessToken, /^w2f_at_/);
 
+  const figmaCreateResponse = await api.inject({
+    method: "POST",
+    url: "/v1/device-connections",
+    payload: { clientType: "figma_plugin", requestedClientName: "Figma desktop" },
+  });
+  assert.equal(figmaCreateResponse.statusCode, 201);
+  const figmaCreated = figmaCreateResponse.json();
+  const figmaApprovalResponse = await api.inject({
+    method: "POST",
+    url: "/v1/device-connections/approve",
+    headers: { authorization: "Bearer clerk-session" },
+    payload: { userCode: figmaCreated.userCode },
+  });
+  assert.equal(figmaApprovalResponse.statusCode, 200);
+  const figmaInstallationId = figmaApprovalResponse.json().installationId;
+  const figmaTokenResponse = await api.inject({
+    method: "POST",
+    url: "/v1/device-connections/token",
+    payload: { deviceCode: figmaCreated.deviceCode },
+  });
+  assert.equal(figmaTokenResponse.statusCode, 200);
+
+  const deviceMeResponse = await api.inject({
+    method: "GET",
+    url: "/v1/device/me",
+    headers: { authorization: `Bearer ${figmaTokenResponse.json().accessToken}` },
+  });
+  assert.equal(deviceMeResponse.statusCode, 200);
+  assert.equal(deviceMeResponse.json().installation.installationId, figmaInstallationId);
+  assert.equal(deviceMeResponse.json().installation.clientType, "figma_plugin");
+  assert.equal(typeof deviceMeResponse.json().installation.userId, "string");
+
+  const installationsResponse = await api.inject({
+    method: "GET",
+    url: "/v1/installations?clientType=figma_plugin",
+    headers: { authorization: `Bearer ${tokens.accessToken}` },
+  });
+  assert.equal(installationsResponse.statusCode, 200);
+  assert.deepEqual(
+    installationsResponse.json().installations.map((installation: { id: string; clientType: string; displayName: string | null }) => ({
+      id: installation.id,
+      clientType: installation.clientType,
+      displayName: installation.displayName,
+    })),
+    [{ id: figmaInstallationId, clientType: "figma_plugin", displayName: "Figma desktop" }]
+  );
+
   await api.close();
   await database.close();
 });

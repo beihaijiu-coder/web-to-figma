@@ -160,3 +160,76 @@ details p { max-width: 720px; padding: 0 32px 21px 0; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }
+
+.connect-page {
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.connect-shell {
+  width: min(760px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 32px 0;
+}
+
+.connect-brand {
+  display: inline-flex;
+  margin-bottom: 24px;
+}
+
+.connect-card {
+  padding: clamp(24px, 5vw, 44px);
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background: var(--paper);
+  box-shadow: 0 24px 60px rgba(41, 33, 22, .1);
+}
+
+.connect-lead {
+  max-width: 640px;
+}
+
+.device-code {
+  display: grid;
+  gap: 6px;
+  margin: 24px 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fffaf2;
+}
+
+.device-code span,
+.connect-status,
+.connect-note {
+  color: var(--muted);
+}
+
+.device-code strong {
+  letter-spacing: .12em;
+  font-size: clamp(1.7rem, 6vw, 2.8rem);
+}
+
+.auth-mount {
+  margin: 18px 0;
+}
+
+.connect-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.connect-actions .button {
+  border: 0;
+}
+
+.connect-actions button:disabled {
+  cursor: not-allowed;
+  opacity: .58;
+}
+
+.connect-status {
+  min-height: 1.5em;
+  margin: 18px 0 0;
+}

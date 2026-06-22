@@ -47,6 +47,15 @@ export type DevicePrincipal = {
   clientType: ClientType;
 };
 
+export type InstallationSummary = {
+  id: string;
+  clientType: ClientType;
+  displayName: string | null;
+  status: "active" | "revoked";
+  createdAt: string;
+  lastSeenAt: string;
+};
+
 export type CreateConnectionInput = {
   clientType: ClientType;
   requestedClientName: string | null;
@@ -74,6 +83,10 @@ export interface DeviceConnectionRepository {
     refreshTokenTtlSeconds: number;
   }): Promise<TokenPair | "invalid" | "reuse_detected">;
   authenticateAccessToken(input: { accessTokenHash: string; now: Date }): Promise<DevicePrincipal | null>;
+  listInstallations(input: {
+    principal: DevicePrincipal;
+    clientType?: ClientType | undefined;
+  }): Promise<InstallationSummary[]>;
 }
 
 export class DeviceConnectionError extends Error {
@@ -187,5 +200,12 @@ export class DeviceConnectionService {
       accessTokenHash: hashOpaqueToken(accessToken),
       now: new Date(),
     });
+  }
+
+  listInstallations(input: {
+    principal: DevicePrincipal;
+    clientType?: ClientType | undefined;
+  }): Promise<InstallationSummary[]> {
+    return this.#repository.listInstallations(input);
   }
 }

@@ -8,6 +8,7 @@ import {
   type CreateConnectionInput,
   type DeviceConnectionApproval,
   type DeviceConnectionRepository,
+  type InstallationSummary,
   type DevicePollResult,
   type DevicePrincipal,
   type TokenPair,
@@ -35,6 +36,15 @@ type RefreshTokenRow = {
   family_revoked_at: Date | null;
 };
 
+type InstallationRow = {
+  id: string;
+  client_type: ClientType;
+  display_name: string | null;
+  status: "active" | "revoked";
+  created_at: Date;
+  last_seen_at: Date;
+};
+
 function isClientType(value: string): value is ClientType {
   return value === "chrome_extension" || value === "figma_plugin";
 }
@@ -46,6 +56,10 @@ function assertClientType(value: string): ClientType {
 
 function secondsUntil(timestamp: Date, now: Date): number {
   return Math.max(0, Math.floor((timestamp.getTime() - now.getTime()) / 1_000));
+}
+
+function toIsoString(value: Date | string): string {
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
 
 export class PostgresDeviceConnectionRepository implements DeviceConnectionRepository {
@@ -404,6 +418,36 @@ export class PostgresDeviceConnectionRepository implements DeviceConnectionRepos
       installationId: row.installation_id,
       clientType: assertClientType(row.client_type),
     };
+  }
+
+  async listInstallations(input: {
+    principal: DevicePrincipal;
+    clientType?: ClientType | undefined;
+  }): Promise<InstallationSummary[]> {
+    const values: unknown[] = [input.principal.userId];
+    const clientTypeFilter = input.clientType ? "AND client_type = $2" : "";
+    if (input.clientType) values.push(input.clientType);
+
+    const result = await this.#pool.query<InstallationRow>(
+      `
+        SELECT id, client_type, display_name, status, created_at, last_seen_at
+        FROM installations
+        WHERE user_id = $1
+          AND status = 'active'
+          ${clientTypeFilter}
+        ORDER BY last_seen_at DESC, created_at DESC
+      `,
+      values
+    );
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      clientType: assertClientType(row.client_type),
+      displayName: row.display_name,
+      status: row.status,
+      createdAt: toIsoString(row.created_at),
+      lastSeenAt: toIsoString(row.last_seen_at),
+    }));
   }
 
   async #issueTokenPair(

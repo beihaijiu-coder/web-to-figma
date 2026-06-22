@@ -51,6 +51,8 @@ curl http://127.0.0.1:8787/health
 - `POST /v1/device-connections/deny` — Clerk-authenticated website denial.
 - `POST /v1/device-connections/token` — extension/plugin polling endpoint; returns an opaque Access Token and rotating Refresh Token once approved.
 - `POST /v1/tokens/refresh` — rotate a Refresh Token; reuse detection revokes the token family and active installation access.
+- `GET /v1/device/me` — extension/plugin token reads its own installation identity.
+- `GET /v1/installations?clientType=figma_plugin` — extension/plugin token lists active installations for the same internal user, used by Chrome to find a target Figma plugin.
 
 ### Conversion handoff
 

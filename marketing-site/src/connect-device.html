@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>连接 Web to Figma 客户端</title>
+    <link rel="canonical" href="{{CANONICAL_URL}}" />
+    <link rel="icon" href="../../assets/web-to-figma-icon.png" sizes="128x128" type="image/png" />
+    <link rel="stylesheet" href="../../styles.css" />
+    <script id="connect-config" type="application/json">{{CONNECT_CONFIG_JSON}}</script>
+    <script src="../../connect-device.js" defer></script>
+  </head>
+  <body class="connect-page">
+    <main class="connect-shell" aria-labelledby="connect-title">
+      <a class="brand connect-brand" href="../../" aria-label="Web to Figma 首页">
+        <img src="../../assets/web-to-figma-icon.png" width="32" height="32" alt="" />
+        <span>Web to Figma</span>
+      </a>
+
+      <section class="connect-card">
+        <p class="eyebrow">账号连接</p>
+        <h1 id="connect-title">连接这个 Web to Figma 客户端</h1>
+        <p class="lead connect-lead">
+          请确认验证码与你在 Chrome 扩展或 Figma 插件中看到的一致。批准后，这台客户端会获得自己的短期访问凭证；不会获得你的 Google 或 Clerk 登录凭证。
+        </p>
+
+        <div class="device-code" aria-label="连接验证码">
+          <span>验证码</span>
+          <strong id="userCode">读取中...</strong>
+        </div>
+
+        <div id="authMount" class="auth-mount"></div>
+
+        <div class="connect-actions">
+          <button id="approveBtn" class="button" type="button" disabled>确认连接</button>
+          <button id="denyBtn" class="button button-secondary" type="button" disabled>拒绝</button>
+        </div>
+
+        <p id="connectStatus" class="connect-status" aria-live="polite"></p>
+      </section>
+    </main>
+  </body>
+</html>

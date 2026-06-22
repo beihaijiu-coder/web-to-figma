@@ -51,13 +51,21 @@ test("Figma plugin UI stays focused on import progress without commercial/report
   assert.deepEqual(manifest.editorType, ["figma"]);
   assert.equal(manifest.main, "src/importer.js");
   assert.equal(manifest.ui, "ui/index.html");
+  assert.deepEqual(manifest.networkAccess.devAllowedDomains, [
+    "http://localhost:8787",
+    "http://localhost:4173",
+  ]);
   assert.equal(ui.includes("Import clipboard capture"), true);
+  assert.equal(ui.includes("Connect account"), true);
+  assert.equal(ui.includes("clientType: \"figma_plugin\""), true);
   assert.equal(ui.includes("manualCaptureInput"), true);
   assert.equal(ui.includes("Figma cannot read the clipboard directly"), true);
   assert.equal(ui.includes('window.addEventListener("paste"'), true);
   assert.equal(ui.includes("tryImportCaptureText"), true);
   assert.equal(ui.includes("Open URL in Chrome"), true);
   assert.equal(ui.includes("Cancel"), true);
+  assert.equal(ui.includes("Partial layers were removed from Figma."), true);
+  assert.equal(ui.includes("Partial layers were kept in Figma."), false);
   assert.equal((ui.match(/id="fallbackFont"/g) || []).length, 1);
   assert.equal((ui.match(/id="overflowMode"/g) || []).length, 1);
   assert.equal(ui.includes('value="preserve"'), true);
@@ -79,6 +87,8 @@ test("Figma plugin main script avoids syntax unsupported by Figma's plugin parse
   assert.equal(/\{\s*\.\.\.|\.\.\.[A-Za-z_$]/.test(main), false, "Figma main script must not use object spread/rest");
   assert.equal(/\bcatch\s*\{/.test(main), false, "Figma main script must not use optional catch binding");
   assert.equal(/\bglobalThis\b|\bmatchAll\s*\(/.test(main), false, "Figma main script must avoid newer runtime globals");
+  assert.equal(main.includes("figmaApi.openExternal"), true);
+  assert.equal(main.includes("figmaApi.clientStorage"), true);
 });
 
 test("manual smoke fixture exercises the first commercial conversion path", () => {

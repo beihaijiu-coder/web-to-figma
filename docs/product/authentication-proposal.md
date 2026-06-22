@@ -1,6 +1,6 @@
 # 认证与内部用户方案（提案）
 
-**状态：** 方案已确认；本地 API 基础实现已完成，真实 Clerk/Neon 联调等待本地密钥填写。
+**状态：** 方案已确认；本地 API 基础实现与开发期客户端连接骨架已完成，真实 Clerk/Neon 联调等待本地密钥填写。
 **范围：** 官网登录与内部用户创建、Chrome 扩展与 Figma 插件接入，以及转换额度校验和短期任务中转。
 
 ## 目标
@@ -75,7 +75,7 @@ users
 
 ## Chrome 扩展连接方案
 
-**状态：** 待确认，尚未实现
+**状态：** API 与 Chrome 扩展开发连接入口已实现；真实 Clerk/Neon 联调等待本地密钥填写。
 **目标：** 让桌面 Chrome 扩展取得与官网登录用户相同的 Web to Figma 身份与权益，但不在扩展中处理 Google 登录，也不向扩展发放 Clerk 会话凭证。
 
 这是一个由 Web to Figma API 管理的“浏览器辅助设备连接”流程，设计上参考 OAuth 2.0 Device Authorization Grant 的一次性设备码与轮询模型。
@@ -142,7 +142,7 @@ sequenceDiagram
 
 ## Figma 插件连接方案
 
-**状态：** 待确认，尚未实现
+**状态：** API 与 Figma 插件开发连接入口已实现；真实 Clerk/Neon 联调等待本地密钥填写。
 **目标：** 让 Figma 插件取得与官网登录用户相同的 Web to Figma 身份与权益，同时不把 Clerk 或 Google 的凭证交给插件。
 
 Figma 插件沿用 Chrome 扩展的“设备授权连接”协议和服务端数据模型；两者是不同的客户端安装实例，而不是两套账户体系。Figma 中应区分插件 UI iframe 与插件主线程：UI 负责 API 请求与轮询，主线程负责 `figma.openExternal()`、`figma.clientStorage` 和 Figma 文档操作。
@@ -219,7 +219,7 @@ sequenceDiagram
 
 ## 转换任务、额度与短期中转
 
-**状态：** 待确认，尚未实现
+**状态：** API 的额度预占、任务状态机与本地临时存储已实现；Chrome 上传和 Figma 领取导入仍待接入。
 **目标：** 将当前 Chrome 扩展采集的场景包短期、加密地交给指定的 Figma 插件导入；Free 用户仅在一次完整导入成功后消耗周额度，Pro 用户不消耗周额度但仍受技术上限约束。
 
 本服务是短期加密任务中转，不承担网页转换的主要计算，也不作为长期网页内容仓库。Chrome 扩展负责采集与上传，Figma 插件负责下载与创建节点，API 只负责身份、权益、状态机、授权和清理编排。
@@ -357,7 +357,7 @@ usage_events
 
 1. 官网 Google 登录、Session JWT、`GET /v1/me` 与内部用户 upsert。**API 已实现，前端登录页和真实 Clerk 联调待密钥填写后接入。**
 2. Neon 中的套餐与免费周额度数据模型、服务端权益检查。**迁移与本地测试已实现。**
-3. Chrome 扩展与 Figma 插件接入统一身份。**设备连接、批准、轮询、安装绑定、Access/Refresh Token 轮换已在 API 层实现。**
+3. Chrome 扩展与 Figma 插件接入统一身份。**设备连接、批准、轮询、安装绑定、Access/Refresh Token 轮换已在 API 层实现；Chrome 扩展 popup、Figma 插件 UI 与官网 `/connect/device/` 开发连接入口已接入。**
 4. 转换任务与短期中转。**本地开发存储适配器、任务创建、上传、领取、下载、成功结算和失败释放已在 API 层实现。**
 5. Clerk webhook：处理用户删除及必要的身份同步。
 6. 支付与 Pro 权益 webhook。

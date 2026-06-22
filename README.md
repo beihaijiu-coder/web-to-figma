@@ -29,3 +29,10 @@ SITE_URL=https://example.com npm run build:site
 `package:extension` 会在 `dist/chrome-extension/` 生成可用于 Chrome「加载已解压的扩展程序」的目录。`build:site` 只接受 HTTPS 根 URL，避免临时地址进入 canonical、robots 或 sitemap。
 
 API 的本地密钥、设备连接和转换中转说明见 [`api/README.md`](api/README.md)。真实 Neon 迁移必须在 `api/.env.local` 填入开发分支的 `DATABASE_URL` 后才运行。
+
+## 本地账号连接联调
+
+1. 在 `api/.env.local` 填入 Clerk 与 Neon 开发环境密钥。
+2. 运行 `npm run migrate:api`，再运行 `npm run dev:api`。
+3. 运行 `SITE_URL=https://example.com npm run build:site` 生成官网；正式域名未定前，连接页只作为本地开发入口使用。
+4. Chrome 扩展 popup 和 Figma 插件 UI 默认请求 `http://localhost:8787`，点击 Connect account 会打开官网 `/connect/device/` 连接页。

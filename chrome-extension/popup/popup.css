@@ -19,6 +19,11 @@ h1 {
   font-size: 14px;
 }
 
+h2 {
+  margin: 0;
+  font-size: 12px;
+}
+
 .row {
   display: flex;
   align-items: center;
@@ -27,11 +32,43 @@ h1 {
   font-size: 13px;
 }
 
+.stack {
+  display: grid;
+  gap: 5px;
+  font-size: 12px;
+}
+
+input,
+select {
+  border: 1px solid #d1d5db;
+  border-radius: 7px;
+  padding: 7px 8px;
+  background: #fff;
+  color: #111827;
+  font: inherit;
+}
+
 .hint {
   margin: 8px 0 12px;
   color: #6b7280;
   font-size: 12px;
   line-height: 1.4;
+}
+
+.account {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.button-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
 }
 
 button {
@@ -43,6 +80,17 @@ button {
   color: #fff;
   font-size: 13px;
   cursor: pointer;
+}
+
+button.secondary {
+  background: #4f46e5;
+}
+
+button.ghost {
+  width: auto;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #374151;
 }
 
 button:disabled {

@@ -53,6 +53,9 @@ const createConversionJobSchema = z.object({
 });
 
 const paramsWithJobIdSchema = z.object({ jobId: z.string().uuid() });
+const listInstallationsQuerySchema = z.object({
+  clientType: z.enum(CLIENT_TYPES).optional(),
+});
 
 async function requireDevicePrincipal(
   deviceConnections: DeviceConnectionService,
@@ -64,6 +67,15 @@ async function requireDevicePrincipal(
   const principal = await deviceConnections.authenticate(token);
   if (!principal || principal.clientType !== clientType) return null;
   return principal;
+}
+
+async function requireAnyDevicePrincipal(
+  deviceConnections: DeviceConnectionService,
+  authorizationHeader: string | undefined
+): Promise<DevicePrincipal | null> {
+  const token = authorizationHeader?.trim().match(/^Bearer\s+([^\s]+)$/i)?.[1];
+  if (!token) return null;
+  return deviceConnections.authenticate(token);
 }
 
 function sha256Hex(body: Buffer): string {
@@ -92,7 +104,7 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
   const allowedOrigins = new Set(dependencies.config.corsAllowedOrigins);
   await api.register(cors, {
     credentials: true,
-    methods: ["GET", "POST", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "OPTIONS"],
     allowedHeaders: ["Authorization", "Content-Type", "Idempotency-Key"],
     origin(origin, callback) {
       if (!origin || allowedOrigins.has(origin)) {
@@ -226,6 +238,25 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
         return reply.code(401).send(errorBody("REFRESH_REUSE_DETECTED", "Reconnect this installation"));
       }
       return reply.code(200).send(result);
+    });
+
+    api.get("/v1/device/me", async (request, reply) => {
+      const principal = await requireAnyDevicePrincipal(deviceConnections, request.headers.authorization);
+      if (!principal) return reply.code(401).send(errorBody("UNAUTHORIZED", "Device token required"));
+      return reply.code(200).send({ installation: principal });
+    });
+
+    api.get("/v1/installations", async (request, reply) => {
+      const principal = await requireAnyDevicePrincipal(deviceConnections, request.headers.authorization);
+      if (!principal) return reply.code(401).send(errorBody("UNAUTHORIZED", "Device token required"));
+
+      const parsed = listInstallationsQuerySchema.safeParse(request.query);
+      if (!parsed.success) return reply.code(400).send(errorBody("INVALID_REQUEST", "Invalid installation query"));
+      const installations = await deviceConnections.listInstallations({
+        principal,
+        clientType: parsed.data.clientType,
+      });
+      return reply.code(200).send({ installations });
     });
   }
 

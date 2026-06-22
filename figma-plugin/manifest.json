@@ -4,5 +4,9 @@
   "api": "1.0.0",
   "main": "src/importer.js",
   "ui": "ui/index.html",
-  "editorType": ["figma"]
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": ["http://localhost:8787"],
+    "devAllowedDomains": ["http://localhost:8787", "http://localhost:4173"]
+  }
 }

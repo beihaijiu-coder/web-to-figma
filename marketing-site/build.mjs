@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const sourceDirectory = path.join(directory, 'src');
 const iconSource = path.join(directory, '..', 'chrome-extension', 'assets', 'icons', 'icon128.png');
+const placeholderClerkPublishableKey = 'pk_test_replace_me';
+const placeholderApiBaseUrl = 'http://localhost:8787';
 
 export function normalizeSiteUrl(input) {
   if (typeof input !== 'string' || input.trim() === '') {
@@ -27,18 +29,43 @@ function robotsFor(canonicalUrl) {
   return `User-agent: *\nAllow: /\n\nSitemap: ${canonicalUrl}sitemap.xml\n`;
 }
 
-export async function buildMarketingSite({ siteUrl, outputDirectory = path.join(directory, 'dist') }) {
+function renderConnectConfig({ apiBaseUrl, clerkPublishableKey, clerkFrontendApiUrl }) {
+  return JSON.stringify({
+    apiBaseUrl: apiBaseUrl || placeholderApiBaseUrl,
+    clerkPublishableKey: clerkPublishableKey || placeholderClerkPublishableKey,
+    clerkFrontendApiUrl: clerkFrontendApiUrl || '',
+  }).replaceAll('<', '\\u003c');
+}
+
+export async function buildMarketingSite({
+  siteUrl,
+  outputDirectory = path.join(directory, 'dist'),
+  apiBaseUrl = process.env.WEB_TO_FIGMA_API_BASE_URL,
+  clerkPublishableKey = process.env.CLERK_PUBLISHABLE_KEY,
+  clerkFrontendApiUrl = process.env.CLERK_FRONTEND_API_URL,
+} = {}) {
   const origin = normalizeSiteUrl(siteUrl);
   const canonicalUrl = `${origin}/`;
   const template = await readFile(path.join(sourceDirectory, 'index.html'), 'utf8');
   const html = template.replaceAll('{{CANONICAL_URL}}', canonicalUrl);
+  const connectTemplate = await readFile(path.join(sourceDirectory, 'connect-device.html'), 'utf8');
+  const connectHtml = connectTemplate
+    .replaceAll('{{CANONICAL_URL}}', `${canonicalUrl}connect/device/`)
+    .replaceAll('{{CONNECT_CONFIG_JSON}}', renderConnectConfig({
+      apiBaseUrl,
+      clerkPublishableKey,
+      clerkFrontendApiUrl,
+    }));
 
   await rm(outputDirectory, { force: true, recursive: true });
   await mkdir(path.join(outputDirectory, 'assets'), { recursive: true });
+  await mkdir(path.join(outputDirectory, 'connect', 'device'), { recursive: true });
   await Promise.all([
     writeFile(path.join(outputDirectory, 'index.html'), html, 'utf8'),
+    writeFile(path.join(outputDirectory, 'connect', 'device', 'index.html'), connectHtml, 'utf8'),
     copyFile(path.join(sourceDirectory, 'styles.css'), path.join(outputDirectory, 'styles.css')),
     copyFile(path.join(sourceDirectory, 'app.js'), path.join(outputDirectory, 'app.js')),
+    copyFile(path.join(sourceDirectory, 'connect-device.js'), path.join(outputDirectory, 'connect-device.js')),
     copyFile(iconSource, path.join(outputDirectory, 'assets', 'web-to-figma-icon.png')),
     writeFile(path.join(outputDirectory, 'robots.txt'), robotsFor(canonicalUrl), 'utf8'),
     writeFile(path.join(outputDirectory, 'sitemap.xml'), sitemapFor(canonicalUrl), 'utf8'),
