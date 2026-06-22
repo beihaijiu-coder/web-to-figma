@@ -14,6 +14,10 @@ test("Chrome extension is packaged for clipboard handoff instead of JSON downloa
     new URL("../../chrome-extension/src/inpage-toolbar.js", import.meta.url),
     "utf8"
   );
+  const popup = fs.readFileSync(
+    new URL("../../chrome-extension/popup/popup.js", import.meta.url),
+    "utf8"
+  );
 
   assert.equal(manifest.permissions.includes("downloads"), false);
   assert.equal(manifest.permissions.includes("clipboardWrite"), true);
@@ -24,6 +28,11 @@ test("Chrome extension is packaged for clipboard handoff instead of JSON downloa
   assert.equal(background.includes("chrome.downloads.download"), false);
   assert.equal(background.includes("payload"), true);
   assert.equal(background.includes("captureVisibleTab"), true);
+  assert.equal(background.includes("sourceTabId"), true);
+  assert.equal(background.includes("isCapturableTab"), true);
+  assert.equal(background.includes("无法采集扩展页、设置页或浏览器内部页面"), true);
+  assert.equal(background.includes('params.set("sourceTabId"'), true);
+  assert.equal(background.includes("popup.html"), true);
   assert.equal(background.includes("screenshot-fallback"), true);
   assert.equal(background.includes("data-figma-capture-ignore"), true);
   assert.equal(toolbar.includes("Copy to clipboard"), true);
@@ -39,6 +48,8 @@ test("Chrome extension is packaged for clipboard handoff instead of JSON downloa
   assert.equal(toolbar.includes("copyCanvasSvgForFigma"), true);
   assert.equal(toolbar.includes("image/svg+xml"), true);
   assert.equal(toolbar.includes("copyPayloadForFigma(pendingCopyPayload)"), true);
+  assert.equal(popup.includes("new URLSearchParams(window.location.search).get(\"sourceTabId\")"), true);
+  assert.equal(popup.includes("sourceTabId:"), true);
 });
 
 test("Figma plugin UI stays focused on import progress without commercial/report panels", () => {

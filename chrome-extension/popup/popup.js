@@ -13,6 +13,7 @@ const connectAccountBtn = document.getElementById("connectAccountBtn");
 const disconnectAccountBtn = document.getElementById("disconnectAccountBtn");
 const cloudStatus = document.getElementById("cloudStatus");
 const figmaTarget = document.getElementById("figmaTarget");
+const sourceTabId = Number(new URLSearchParams(window.location.search).get("sourceTabId") || 0);
 let pendingCopyPayload = null;
 let cloudBusy = false;
 
@@ -210,7 +211,11 @@ captureBtn.addEventListener("click", () => {
   setBusy(true);
   setStatus("");
   chrome.runtime.sendMessage(
-    { type: "FIGMA_CAPTURE_START", targetInstallationId: figmaTarget.value || null },
+    {
+      type: "FIGMA_CAPTURE_START",
+      sourceTabId: Number.isInteger(sourceTabId) && sourceTabId > 0 ? sourceTabId : null,
+      targetInstallationId: figmaTarget.value || null,
+    },
     (res) => {
     setBusy(false);
 

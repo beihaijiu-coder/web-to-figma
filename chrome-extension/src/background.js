@@ -864,7 +864,39 @@ chrome.action.onClicked.addListener(async (tab) => {
   }
 });
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+function isCapturableTab(tab) {
+  return Boolean(tab?.id && /^https?:\/\//i.test(tab.url || ""));
+}
+
+function captureAccessErrorMessage(error) {
+  const message = String(error?.message || error || "");
+  if (/Cannot access contents of the page|Extension manifest must request permission/i.test(message)) {
+    return "无法访问当前标签页。请确认 Chrome 扩展已重新加载，并在普通 http/https 网页上发起采集。";
+  }
+  return message || "采集失败";
+}
+
+async function resolveCaptureTab(msg, sender) {
+  const requestedTabId = Number(msg?.sourceTabId || 0);
+  if (Number.isInteger(requestedTabId) && requestedTabId > 0) {
+    try {
+      const tab = await chrome.tabs.get(requestedTabId);
+      if (isCapturableTab(tab)) return tab;
+    } catch {
+      // Fall through to the sender/active tab checks below.
+    }
+  }
+
+  if (isCapturableTab(sender?.tab)) return sender.tab;
+
+  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  const tab = tabs && tabs[0];
+  if (isCapturableTab(tab)) return tab;
+
+  throw new Error("无法采集扩展页、设置页或浏览器内部页面。请切回要采集的网页，再打开 Web to Figma 浮窗采集。");
+}
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || !String(msg.type || "").startsWith("WEB_TO_FIGMA_CLOUD_")) return;
 
   (async () => {
@@ -886,7 +918,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       }
 
       if (msg.type === "WEB_TO_FIGMA_CLOUD_OPEN_SETTINGS") {
-        await chrome.tabs.create({ url: chrome.runtime.getURL("popup/popup.html") });
+        const params = new URLSearchParams();
+        if (isCapturableTab(sender?.tab)) params.set("sourceTabId", String(sender.tab.id));
+        const query = params.toString();
+        await chrome.tabs.create({ url: chrome.runtime.getURL(`popup/popup.html${query ? `?${query}` : ""}`) });
         sendResponse({ ok: true });
         return;
       }
@@ -910,19 +945,14 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return true;
 });
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || msg.type !== "FIGMA_CAPTURE_START") return;
 
   (async () => {
     try {
       await loadProxySession();
       const proxyDiagStart = figmaProxyDiagnostics.length;
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      const tab = tabs && tabs[0];
-
-      if (!tab?.id) {
-        throw new Error("No active tab to capture");
-      }
+      const tab = await resolveCaptureTab(msg, sender);
 
       const { result, diagnostics } = await runCapture(tab.id, msg.options || {});
       const payload = await hydrateSceneAssets(normalizeCapturePayload(result), tab);
@@ -962,7 +992,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       });
     } catch (error) {
       console.error("Capture failed:", error);
-      sendResponse({ ok: false, error: String(error) });
+      sendResponse({ ok: false, error: captureAccessErrorMessage(error) });
     }
   })();
 
