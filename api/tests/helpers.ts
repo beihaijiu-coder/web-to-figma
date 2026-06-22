@@ -14,7 +14,13 @@ export function testConfig(): ApiConfig {
       secretKey: "sk_test_example",
       authorizedParties: ["http://localhost:4173"],
     },
-    corsAllowedOrigins: ["http://localhost:4173", "null", "chrome-extension://*"],
+    corsAllowedOrigins: [
+      "http://localhost:4173",
+      "null",
+      "https://www.figma.com",
+      "https://figma.com",
+      "chrome-extension://*",
+    ],
     publicWebUrl: "http://localhost:4173",
     device: {
       connectionTtlSeconds: 600,

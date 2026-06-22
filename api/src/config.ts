@@ -71,6 +71,18 @@ function commaSeparated(value: string): string[] {
   return [...new Set(value.split(",").map((item) => item.trim()).filter(Boolean))];
 }
 
+const developmentClientCorsOrigins = [
+  "null",
+  "https://www.figma.com",
+  "https://figma.com",
+  "chrome-extension://*",
+];
+
+function withDevelopmentClientCorsOrigins(origins: string[], environment: ApiConfig["environment"]): string[] {
+  if (environment !== "development") return origins;
+  return [...new Set([...origins, ...developmentClientCorsOrigins])];
+}
+
 function originList(
   value: string,
   variableName: string,
@@ -148,6 +160,7 @@ export function createConfig(environment: NodeJS.ProcessEnv = process.env): ApiC
     parsed.data.NODE_ENV,
     { allowClientOrigins: true }
   );
+  const effectiveCorsAllowedOrigins = withDevelopmentClientCorsOrigins(corsAllowedOrigins, parsed.data.NODE_ENV);
   const audience = commaSeparated(parsed.data.CLERK_AUDIENCE);
 
   if (parsed.data.NODE_ENV === "production" && !audience.length) {
@@ -169,7 +182,7 @@ export function createConfig(environment: NodeJS.ProcessEnv = process.env): ApiC
     port: parsed.data.API_PORT,
     databaseUrl: parsed.data.DATABASE_URL,
     clerk,
-    corsAllowedOrigins,
+    corsAllowedOrigins: effectiveCorsAllowedOrigins,
     publicWebUrl: parsed.data.PUBLIC_WEB_URL,
     device: {
       connectionTtlSeconds: parsed.data.DEVICE_CONNECTION_TTL_SECONDS,

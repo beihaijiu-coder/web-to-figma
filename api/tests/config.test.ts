@@ -45,6 +45,23 @@ test("configuration allows development without a custom session-token audience",
   assert.equal(config.clerk.audience, undefined);
 });
 
+test("development configuration adds Figma and Chrome client origins for local plugin testing", () => {
+  const config = createConfig({
+    ...baseEnvironment,
+    NODE_ENV: "development",
+    CORS_ALLOWED_ORIGINS: "http://localhost:4173",
+    CLERK_AUDIENCE: "",
+  });
+
+  assert.deepEqual(config.corsAllowedOrigins, [
+    "http://localhost:4173",
+    "null",
+    "https://www.figma.com",
+    "https://figma.com",
+    "chrome-extension://*",
+  ]);
+});
+
 test("production configuration rejects insecure origins and missing audience", () => {
   assert.throws(
     () =>
