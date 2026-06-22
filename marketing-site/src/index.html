@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="通过 Chrome 扩展与 Figma 插件，将当前网页或选中的组件导入 Figma。常规内容可继续编辑，复杂局部优先保留视觉结果。"
+    />
+    <meta name="robots" content="index,follow" />
+    <title>Web to Figma：将网页转换为可编辑的 Figma 设计稿</title>
+    <link rel="canonical" href="{{CANONICAL_URL}}" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:site_name" content="Web to Figma" />
+    <meta property="og:title" content="Web to Figma：将网页转换为可编辑的 Figma 设计稿" />
+    <meta
+      property="og:description"
+      content="通过 Chrome 扩展与 Figma 插件，将当前网页或选中的组件导入 Figma。"
+    />
+    <meta property="og:url" content="{{CANONICAL_URL}}" />
+    <link rel="icon" href="assets/web-to-figma-icon.png" sizes="128x128" type="image/png" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
+
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="#top" aria-label="Web to Figma 首页">
+          <img src="assets/web-to-figma-icon.png" width="32" height="32" alt="" />
+          <span>Web to Figma</span>
+        </a>
+        <button
+          class="menu-toggle"
+          type="button"
+          aria-controls="site-navigation"
+          aria-expanded="false"
+        >
+          菜单
+        </button>
+        <nav id="site-navigation" class="site-nav" aria-label="主导航">
+          <a href="#how-it-works">工作原理</a>
+          <a href="#capabilities">转换方式</a>
+          <a href="#pricing">价格</a>
+          <a href="#faq">常见问题</a>
+          <a class="button button-small" href="#install">开始使用</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main-content">
+      <section id="top" class="hero section">
+        <div class="container hero-layout">
+          <div class="hero-copy">
+            <p class="eyebrow">桌面版 Chrome 扩展 · Figma 插件</p>
+            <h1>把当前网页转换为可编辑的 Figma 设计稿</h1>
+            <p class="lead">
+              不必对着截图重搭。将完整页面或选中的组件导入 Figma，常规文字、容器、按钮与图片可继续编辑；复杂局部优先保留视觉结果。
+            </p>
+            <div class="cta-group">
+              <a class="button" href="#install">查看安装方式</a>
+              <a class="button button-secondary" href="#how-it-works">了解转换流程</a>
+            </div>
+            <ul class="feature-list" aria-label="核心能力">
+              <li>当前渲染状态</li>
+              <li>完整页面或单个组件</li>
+              <li>两种导入布局偏好</li>
+            </ul>
+          </div>
+
+          <figure class="conversion-proof" aria-labelledby="proof-caption">
+            <div class="proof-head">
+              <span>一次转换</span>
+              <span>当前页面状态</span>
+            </div>
+            <div class="proof-flow">
+              <article class="proof-card source-card">
+                <p class="proof-label">Chrome</p>
+                <h2>当前网页</h2>
+                <p>完整页面或一个选中的组件</p>
+                <code>app.example.com/settings</code>
+              </article>
+              <p class="flow-arrow" aria-hidden="true">→</p>
+              <article class="proof-card result-card">
+                <p class="proof-label">Figma</p>
+                <h2>可继续编辑</h2>
+                <ul>
+                  <li>标题与正文</li>
+                  <li>图片填充</li>
+                  <li>容器与布局</li>
+                </ul>
+              </article>
+            </div>
+            <figcaption id="proof-caption">
+              导入以当前浏览器实际渲染的单一页面状态为准，不会一次生成多个断点。
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="how-it-works" class="section section-muted" aria-labelledby="how-title">
+        <div class="container">
+          <div class="section-heading">
+            <p class="eyebrow">工作原理</p>
+            <h2 id="how-title">从 Chrome 页面到 Figma，只需三步</h2>
+            <p>浏览器负责采集当前渲染结果，Figma 插件负责创建可继续编辑的设计结构。</p>
+          </div>
+          <ol class="steps">
+            <li>
+              <span class="step-number">1</span>
+              <h3>安装两个工具</h3>
+              <p>添加 Web to Figma Figma 插件，并在桌面版 Chrome 安装扩展。</p>
+            </li>
+            <li>
+              <span class="step-number">2</span>
+              <h3>选择页面或组件</h3>
+              <p>在当前 Chrome 页面采集完整页面或单个组件；也可在 Figma 中输入 URL 发起 Chrome 采集。</p>
+            </li>
+            <li>
+              <span class="step-number">3</span>
+              <h3>在 Figma 继续编辑</h3>
+              <p>选择导入布局偏好后，直接定位到生成结果，继续改文案、图片和布局。</p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section id="capabilities" class="section" aria-labelledby="capabilities-title">
+        <div class="container split-layout">
+          <div class="section-heading section-heading-left">
+            <p class="eyebrow">转换方式</p>
+            <h2 id="capabilities-title">根据下一步工作，选择导入偏好</h2>
+            <p>同一个页面不必被强行套进单一模式：你决定更看重画面还原，还是后续的布局编辑。</p>
+          </div>
+          <div class="preference-grid">
+            <article class="preference-card">
+              <p class="card-kicker">偏好一</p>
+              <h3>视觉还原优先</h3>
+              <p>偏向固定坐标，让导入后的画面尽可能贴近当前网页的视觉结果。</p>
+            </article>
+            <article class="preference-card preference-card-accent">
+              <p class="card-kicker">偏好二</p>
+              <h3>可编辑布局优先</h3>
+              <p>在可靠的情况下尽可能使用 Figma 自动布局，方便后续调整间距与内容。</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="boundaries" class="section section-muted" aria-labelledby="boundaries-title">
+        <div class="container split-layout">
+          <div class="section-heading section-heading-left">
+            <p class="eyebrow">真实的可编辑性</p>
+            <h2 id="boundaries-title">不是整页截图，也不承诺不可能的转换</h2>
+            <p>常规网页内容会转换为 Figma 原生节点；无法可靠转换的复杂局部会在不影响页面整体视觉的前提下保留其视觉结果。</p>
+          </div>
+          <ul class="boundary-list">
+            <li><strong>文字与容器</strong><span>尽可能转为可选择、可修改的 Figma 图层。</span></li>
+            <li><strong>图片</strong><span>作为可替换的图片节点保留在设计结构中。</span></li>
+            <li><strong>复杂局部</strong><span>按局部降级处理，不把整页变成单张图片。</span></li>
+            <li><strong>图层名称</strong><span>根据网页语义和元素信息生成稳定、可读的名称。</span></li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="privacy" class="section" aria-labelledby="privacy-title">
+        <div class="container privacy-panel">
+          <div>
+            <p class="eyebrow">私有页面</p>
+            <h2 id="privacy-title">登录态页面，按你看到的状态采集</h2>
+          </div>
+          <p>
+            网页采集由已安装的桌面版 Chrome 扩展执行；扩展与 Figma 插件之间通过短时加密任务中转传递转换任务，而不是由 Figma 直接抓取网页。
+          </p>
+        </div>
+      </section>
+
+      <section id="pricing" class="section section-muted" aria-labelledby="pricing-title">
+        <div class="container">
+          <div class="section-heading">
+            <p class="eyebrow">价格</p>
+            <h2 id="pricing-title">免费开始，按需升级</h2>
+            <p>Free 和 Pro 的转换能力边界清晰；年付是默认推荐，两个周期的 Pro 权益一致。</p>
+          </div>
+          <div class="billing-toggle" role="group" aria-label="选择 Pro 订阅周期">
+            <button type="button" data-billing="annual" aria-pressed="true">年付 · 节省 $48</button>
+            <button type="button" data-billing="monthly" aria-pressed="false">月付</button>
+          </div>
+          <div class="pricing-grid">
+            <article class="price-card">
+              <p class="plan-name">Free</p>
+              <p class="price"><span>$0</span> / 永久</p>
+              <p>验证一个完整工作流。</p>
+              <ul>
+                <li>每周 2 次完整页面或组件转换</li>
+                <li>完整页面与单个组件采集</li>
+                <li>Figma 可编辑设计结构</li>
+              </ul>
+              <a class="button button-secondary" href="#install">查看安装方式</a>
+            </article>
+            <article class="price-card price-card-featured">
+              <p class="plan-name">Pro</p>
+              <p class="price" data-price><span>$96</span> / 年</p>
+              <p data-price-caption>年付默认推荐；也可按月订阅。</p>
+              <ul>
+                <li><strong>无限转换</strong>，受单任务技术上限约束</li>
+                <li>尽可能保留源站原始分辨率图片</li>
+                <li>优先支持</li>
+              </ul>
+              <a class="button" href="#faq">查看版本说明</a>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="faq" class="section" aria-labelledby="faq-title">
+        <div class="container faq-layout">
+          <div class="section-heading section-heading-left">
+            <p class="eyebrow">常见问题</p>
+            <h2 id="faq-title">先弄清楚转换结果，再开始导入</h2>
+          </div>
+          <div class="faq-list">
+            <details>
+              <summary>导入后是否所有内容都能编辑？</summary>
+              <p>常规文字、容器、按钮和图片会尽可能转为原生 Figma 节点。复杂或不可靠的局部会保留视觉结果，但不会将整页降级为单张图片。</p>
+            </details>
+            <details>
+              <summary>可以一次导入多个响应式断点吗？</summary>
+              <p>不可以。一个任务处理当前选择的一个网页，并以浏览器实际渲染的单一视口状态导入。</p>
+            </details>
+            <details>
+              <summary>Figma 插件可以直接抓取 URL 吗？</summary>
+              <p>在 Figma 中输入 URL 可以发起任务；实际网页采集仍由已安装的 Chrome 扩展完成。</p>
+            </details>
+            <details>
+              <summary>网页字体在 Figma 中不可用怎么办？</summary>
+              <p>导入会自动匹配最接近的可用字体继续完成；开始前也可以指定统一替代字体。</p>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section id="install" class="section final-cta" aria-labelledby="install-title">
+        <div class="container">
+          <p class="eyebrow">开始使用</p>
+          <h2 id="install-title">先安装插件，再把当前网页带回 Figma</h2>
+          <p>正式下载链接确定后，在这里配置 Figma 插件与 Chrome 扩展的入口。</p>
+          <a class="button" href="#top">返回顶部</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <a class="brand" href="#top" aria-label="Web to Figma 首页">
+          <img src="assets/web-to-figma-icon.png" width="28" height="28" alt="" />
+          <span>Web to Figma</span>
+        </a>
+        <p>将当前网页转换为可继续编辑的 Figma 设计结构。</p>
+        <a href="#privacy">隐私说明</a>
+        <p>© 2026 Web to Figma</p>
+      </div>
+    </footer>
+  </body>
+</html>

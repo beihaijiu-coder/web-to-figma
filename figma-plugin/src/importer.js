@@ -1852,8 +1852,28 @@
   }
 
   function cleanupCancelled(figma, rootFrame, options) {
+    const page = figma && figma.currentPage;
+    const createdNodes = new Set(((options && options.createdNodes) || []).filter(Boolean));
+    if (rootFrame) createdNodes.add(rootFrame);
+
     try {
-      focusResult(figma, rootFrame);
+      // Figma creates nodes on the current page before they are appended into the
+      // imported root. Remove only this import's top-level nodes: removing a root
+      // also removes all of its descendants, while a sidecar overflow frame needs
+      // its own removal because it is a sibling of the root.
+      const roots = Array.from(createdNodes).filter(
+        (node) => node === rootFrame || !page || node.parent === page
+      );
+      for (let index = roots.length - 1; index >= 0; index--) {
+        const node = roots[index];
+        if (node && typeof node.remove === "function") node.remove();
+      }
+
+      // Do not disturb a selection that pre-dated the import, but make sure the
+      // selection cannot retain a node that has just been removed.
+      if (page && Array.isArray(page.selection)) {
+        page.selection = page.selection.filter((node) => !createdNodes.has(node));
+      }
     } finally {
       progress(options, "cancelled");
     }
@@ -2276,6 +2296,10 @@
 
       if (importOptions.overflowMode === "sidecar") {
         overflow = await createOverflowContentFrame(figma, scene, sourceRoot, rootRect, importOptions);
+        if (isCancelled(importOptions)) {
+          cleanupCancelled(figma, rootFrame, importOptions);
+          return { ok: false, cancelled: true, root: rootFrame };
+        }
       }
 
       focusResult(figma, rootFrame);

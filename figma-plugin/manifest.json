@@ -2,7 +2,7 @@
   "name": "Web to Figma",
   "id": "web-to-figma-local-mvp",
   "api": "1.0.0",
-  "main": "importer.js",
-  "ui": "ui.html",
+  "main": "src/importer.js",
+  "ui": "ui/index.html",
   "editorType": ["figma"]
 }

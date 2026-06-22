@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 
 const require = createRequire(import.meta.url);
-const { importSceneToFigma } = require("../figma-plugin/importer.js");
+const { importSceneToFigma } = require("../../figma-plugin/src/importer.js");
 
 function createFakeFigma({
   unavailableFonts = [],
@@ -2251,7 +2251,7 @@ test("simple svg stays editable and complex content degrades only locally", asyn
   assert.equal(label.characters, "Revenue");
 });
 
-test("cancelling an import reports progress and keeps partial Figma nodes", async () => {
+test("cancelling an import reports progress and removes partial Figma nodes", async () => {
   const figma = createFakeFigma();
   const progress = [];
   const scene = {
@@ -2284,7 +2284,7 @@ test("cancelling an import reports progress and keeps partial Figma nodes", asyn
     figma,
     onProgress(event) {
       progress.push(event.stage);
-      if (event.stage === "creating-nodes") cancel = true;
+      if (event.stage === "creating-nodes" && event.current === 2) cancel = true;
     },
     shouldCancel() {
       return cancel;
@@ -2293,10 +2293,62 @@ test("cancelling an import reports progress and keeps partial Figma nodes", asyn
 
   assert.equal(result.ok, false);
   assert.equal(result.cancelled, true);
-  assert.equal(result.root.removed, undefined);
-  assert.deepEqual(figma.currentPage.children, [result.root]);
-  assert.deepEqual(figma.currentPage.selection, [result.root]);
+  assert.equal(result.root.removed, true);
+  assert.deepEqual(figma.currentPage.children, []);
+  assert.deepEqual(figma.currentPage.selection, []);
   assert.ok(progress.includes("import-started"));
   assert.ok(progress.includes("creating-nodes"));
   assert.ok(progress.includes("cancelled"));
+});
+
+test("cancelling sidecar overflow import removes both task roots", async () => {
+  const figma = createFakeFigma();
+  const scene = {
+    version: 1,
+    source: { url: "https://example.com/carousel", selector: "body" },
+    viewport: { width: 100, height: 100 },
+    assets: {
+      "asset-card": { id: "asset-card", contentType: "image/png", base64: "AA==" },
+    },
+    root: {
+      kind: "frame",
+      name: "Carousel page",
+      rect: { x: 0, y: 0, width: 100, height: 100 },
+      children: [
+        {
+          kind: "frame",
+          name: "li.off-canvas-card",
+          tag: "li",
+          rect: { x: 120, y: 0, width: 100, height: 100 },
+          children: [
+            {
+              kind: "image",
+              name: "img.card",
+              tag: "img",
+              assetId: "asset-card",
+              rect: { x: 120, y: 0, width: 100, height: 100 },
+            },
+          ],
+        },
+      ],
+    },
+  };
+  let cancel = false;
+
+  const result = await importSceneToFigma(scene, {
+    figma,
+    overflowMode: "sidecar",
+    onProgress(event) {
+      if (event.stage === "creating-overflow-content") cancel = true;
+    },
+    shouldCancel() {
+      return cancel;
+    },
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.cancelled, true);
+  assert.equal(result.root.removed, true);
+  assert.deepEqual(figma.currentPage.children, []);
+  assert.deepEqual(figma.currentPage.selection, []);
 });

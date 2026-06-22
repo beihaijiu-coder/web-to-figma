@@ -3,7 +3,10 @@ import fs from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
-const runnerSource = fs.readFileSync(new URL("../runner.js", import.meta.url), "utf8");
+const runnerSource = fs.readFileSync(
+  new URL("../../chrome-extension/src/runner.js", import.meta.url),
+  "utf8"
+);
 
 function createRunnerContext({
   bodyScrollHeight = 800,

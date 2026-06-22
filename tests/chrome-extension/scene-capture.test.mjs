@@ -3,7 +3,10 @@ import fs from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
-const source = fs.readFileSync(new URL("../scene-capture.js", import.meta.url), "utf8");
+const source = fs.readFileSync(
+  new URL("../../chrome-extension/src/scene-capture.js", import.meta.url),
+  "utf8"
+);
 
 function createElement(tagName, rect, options = {}) {
   const element = {

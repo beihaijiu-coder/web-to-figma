@@ -1270,62 +1270,23 @@ V1 处理策略：
 
 ---
 
-## 22. 项目目录建议
+## 22. 当前项目目录
+
+当前仓库按可独立发布的交付物组织，而不在早期引入额外的工作区工具：
 
 ```text
 web-to-figma/
-├── apps/
-│   ├── browser-extension/
-│   │   ├── src/
-│   │   │   ├── content/
-│   │   │   ├── background/
-│   │   │   ├── popup/
-│   │   │   ├── selector/
-│   │   │   └── capture/
-│   │   └── manifest.json
-│   │
-│   ├── figma-plugin/
-│   │   ├── src/
-│   │   │   ├── main/
-│   │   │   ├── ui/
-│   │   │   ├── importer/
-│   │   │   ├── node-builders/
-│   │   │   ├── layout/
-│   │   │   ├── fonts/
-│   │   │   ├── assets/
-│   │   │   └── reports/
-│   │   └── manifest.json
-│   │
-│   └── api/
-│       ├── src/
-│       │   ├── auth/
-│       │   ├── tasks/
-│       │   ├── assets/
-│       │   ├── quotas/
-│       │   └── cleanup/
-│
-├── packages/
-│   ├── scene-model/
-│   ├── capture-engine/
-│   ├── style-parser/
-│   ├── layout-inference/
-│   ├── asset-utils/
-│   ├── shared-types/
-│   ├── error-codes/
-│   └── test-fixtures/
-│
-├── tests/
-│   ├── unit/
-│   ├── integration/
-│   ├── visual/
-│   └── fixtures/
-│
-└── docs/
-    ├── architecture.md
-    ├── scene-format.md
-    ├── privacy.md
-    └── compatibility.md
+├── chrome-extension/  # 桌面 Chrome 采集端，含可加载的 manifest.json
+├── figma-plugin/      # Figma 导入端，含独立 manifest.json
+├── marketing-site/    # 独立构建与部署的官网
+├── tests/             # 按 Chrome、Figma、官网与端到端流程分组
+├── docs/              # 产品、PRD、ADR 与 Agent 指引
+├── scripts/           # 打包等跨交付物工具
+├── AGENTS.md
+└── CONTEXT.md
 ```
+
+当场景数据契约有两个稳定适配端（Chrome 采集与 Figma 导入）时，再评估抽出共享模块；在此之前保持模块贴近唯一调用方，避免形成只有形式、没有杠杆的目录层级。
 
 ---
 

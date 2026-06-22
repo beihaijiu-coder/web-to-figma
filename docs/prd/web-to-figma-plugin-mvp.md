@@ -94,7 +94,7 @@ The plugin prioritizes usable output: conventional web content remains editable,
 
 ## Further Notes
 
-- The shared language in `CONTEXT.md` is authoritative for future work. `争议文档.md` records deliberately deferred product decisions and must not be mistaken for current MVP scope.
+- The shared language in `CONTEXT.md` is authoritative for future work. `docs/product/open-decisions.md` records deliberately deferred product decisions and must not be mistaken for current MVP scope.
 - Existing commercial decisions remain useful future context, but the implementation order is explicit: make the core plugin reliable and pleasant before reconnecting payment, web, or broader platform work.
 - The plugin must avoid page-type or ownership whitelists in its product behavior. Browser and Figma platform limitations may require visible-content degradation, but must not cause unrelated elements to stop a task.
 - The current extension's JSON-download behavior is a technical bridge only. The intended MVP completion path is import into Figma, not asking the user to manage an exported JSON file.

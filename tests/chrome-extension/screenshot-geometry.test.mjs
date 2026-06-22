@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { visibleCaptureBounds } from "../screenshot-geometry.mjs";
+import { visibleCaptureBounds } from "../../chrome-extension/src/core/screenshot-geometry.mjs";
 
 test("visibleCaptureBounds preserves a fully visible target", () => {
   assert.deepEqual(

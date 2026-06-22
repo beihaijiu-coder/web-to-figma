@@ -13,3 +13,7 @@ Use the configured workflow labels. See `docs/agents/triage-labels.md`.
 ### Domain docs
 
 This is a single-context repo. Read root `CONTEXT.md` and any relevant `docs/adr/` records. See `docs/agents/domain.md`.
+
+### Implementation constraints
+
+Plugin implementations must remain general across webpages and avoid site-specific rules. See `docs/agents/implementation-constraints.md`.

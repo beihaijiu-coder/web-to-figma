@@ -1,11 +1,11 @@
-import { normalizeSceneAssetsForFigma } from "./asset-normalizer.mjs";
-import { normalizeFixedShellOverlaps } from "./app-shell-normalizer.mjs";
-import { visibleCaptureBounds } from "./screenshot-geometry.mjs";
+import { normalizeSceneAssetsForFigma } from "./core/asset-normalizer.mjs";
+import { normalizeFixedShellOverlaps } from "./core/app-shell-normalizer.mjs";
+import { visibleCaptureBounds } from "./core/screenshot-geometry.mjs";
 
 const WORLD = "ISOLATED";
-const CAPTURE_FILE = "scene-capture.js";
-const RUNNER_FILE = "runner.js";
-const TOOLBAR_FILE = "inpage-toolbar.js";
+const CAPTURE_FILE = "src/scene-capture.js";
+const RUNNER_FILE = "src/runner.js";
+const TOOLBAR_FILE = "src/inpage-toolbar.js";
 const FIGMA_CAPTURE_CONCURRENCY_KEY = "proxyFetchConcurrency";
 const FIGMA_CAPTURE_ALLOWED_CONCURRENCY = new Set([4, 6, 8, 10, 12, 16, 20]);
 const FIGMA_CAPTURE_DEFAULT_CONCURRENCY = 8;

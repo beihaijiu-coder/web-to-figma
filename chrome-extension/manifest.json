@@ -10,28 +10,28 @@
     "clipboardWrite"
   ],
   "background": {
-    "service_worker": "background.js",
+    "service_worker": "src/background.js",
     "type": "module"
   },
   "icons": {
-    "16": "logo/icon16.png",
-    "48": "logo/icon48.png",
-    "128": "logo/icon128.png"
+    "16": "assets/icons/icon16.png",
+    "48": "assets/icons/icon48.png",
+    "128": "assets/icons/icon128.png"
   },
   "action": {
     "default_title": "Capture page for Figma",
     "default_icon": {
-      "16": "logo/icon16.png",
-      "48": "logo/icon48.png",
-      "128": "logo/icon128.png"
+      "16": "assets/icons/icon16.png",
+      "48": "assets/icons/icon48.png",
+      "128": "assets/icons/icon128.png"
     }
   },
   "web_accessible_resources": [
     {
       "resources": [
-        "scene-capture.js",
-        "runner.js",
-        "logo/icon16.png"
+        "src/scene-capture.js",
+        "src/runner.js",
+        "assets/icons/icon16.png"
       ],
       "matches": [
         "http://*/*",

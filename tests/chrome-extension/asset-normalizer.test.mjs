@@ -6,7 +6,7 @@ import {
   imageDimensionsFromBytes,
   normalizeImageAssetForFigma,
   scaledImageSize,
-} from "../asset-normalizer.mjs";
+} from "../../chrome-extension/src/core/asset-normalizer.mjs";
 
 function jpegHeaderBase64(width, height) {
   return Buffer.from([

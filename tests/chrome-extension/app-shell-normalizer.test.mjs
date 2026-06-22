@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { normalizeFixedShellOverlaps } from "../app-shell-normalizer.mjs";
+import { normalizeFixedShellOverlaps } from "../../chrome-extension/src/core/app-shell-normalizer.mjs";
 
 function plain(value) {
   return JSON.parse(JSON.stringify(value));

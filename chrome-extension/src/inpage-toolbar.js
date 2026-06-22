@@ -368,7 +368,7 @@
   function createToolbar() {
     const logoUrl =
       typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.getURL
-        ? chrome.runtime.getURL("logo/icon16.png")
+        ? chrome.runtime.getURL("assets/icons/icon16.png")
         : "";
     const root = document.createElement("section");
 
