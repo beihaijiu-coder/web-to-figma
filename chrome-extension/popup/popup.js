@@ -1,6 +1,7 @@
 const STORAGE_KEY = "enableAssetProxyFetch";
 const CONCURRENCY_KEY = "proxyFetchConcurrency";
 const DEFAULT_CONCURRENCY = "8";
+const TARGET_INSTALLATION_KEY = "webToFigmaTargetInstallationId";
 const ALLOWED_CONCURRENCY = new Set(["4", "6", "8", "10", "12", "16", "20", "infinite"]);
 
 const toggle = document.getElementById("assetProxyToggle");
@@ -11,6 +12,7 @@ const apiBaseUrl = document.getElementById("apiBaseUrl");
 const connectAccountBtn = document.getElementById("connectAccountBtn");
 const disconnectAccountBtn = document.getElementById("disconnectAccountBtn");
 const cloudStatus = document.getElementById("cloudStatus");
+const figmaTarget = document.getElementById("figmaTarget");
 let pendingCopyPayload = null;
 let cloudBusy = false;
 
@@ -61,6 +63,21 @@ function normalizeConcurrency(value) {
   return ALLOWED_CONCURRENCY.has(str) ? str : DEFAULT_CONCURRENCY;
 }
 
+function renderFigmaTargets(installations, selectedId = figmaTarget.value) {
+  const targets = Array.isArray(installations) ? installations : [];
+  figmaTarget.replaceChildren(new Option("剪贴板手动导入", ""));
+  for (const [index, installation] of targets.entries()) {
+    const label = installation.displayName || `Figma 插件 ${index + 1}`;
+    figmaTarget.append(new Option(label, installation.id));
+  }
+  if (targets.some((installation) => installation.id === selectedId)) {
+    figmaTarget.value = selectedId;
+  } else if (targets.length === 1) {
+    figmaTarget.value = targets[0].id;
+  }
+  chrome.storage.local.set({ [TARGET_INSTALLATION_KEY]: figmaTarget.value });
+}
+
 async function refreshCloudStatus() {
   if (cloudBusy) return;
   try {
@@ -72,8 +89,14 @@ async function refreshCloudStatus() {
 
     apiBaseUrl.value = res.apiBaseUrl || apiBaseUrl.value;
     if (res.connected) {
+      const stored = await chrome.storage.local.get({ [TARGET_INSTALLATION_KEY]: "" });
+      renderFigmaTargets(res.figmaInstallations, stored[TARGET_INSTALLATION_KEY]);
       const targets = Array.isArray(res.figmaInstallations) ? res.figmaInstallations.length : 0;
-      setCloudStatus(`已连接。可用 Figma 插件：${targets} 个。`);
+      setCloudStatus(
+        targets > 0
+          ? `已连接。选择目标 Figma 插件后，采集结果会加密发送。`
+          : "已连接，但还没有已连接的 Figma 插件。"
+      );
       return;
     }
 
@@ -88,6 +111,7 @@ async function refreshCloudStatus() {
     }
 
     setCloudStatus("未连接。先连接账号，再使用云端任务中转。");
+    renderFigmaTargets([]);
   } catch (error) {
     setCloudStatus(`连接状态读取失败：${error.message || error}`);
   }
@@ -98,14 +122,22 @@ chrome.storage.local.get(
     [STORAGE_KEY]: false,
     [CONCURRENCY_KEY]: DEFAULT_CONCURRENCY,
     webToFigmaApiBaseUrl: "http://localhost:8787",
+    [TARGET_INSTALLATION_KEY]: "",
   },
   (res) => {
     toggle.checked = Boolean(res[STORAGE_KEY]);
     concurrency.value = normalizeConcurrency(res[CONCURRENCY_KEY]);
     apiBaseUrl.value = res.webToFigmaApiBaseUrl || "http://localhost:8787";
+    figmaTarget.value = res[TARGET_INSTALLATION_KEY] || "";
     refreshCloudStatus();
   }
 );
+
+setInterval(() => void refreshCloudStatus(), 5_000);
+
+figmaTarget.addEventListener("change", () => {
+  chrome.storage.local.set({ [TARGET_INSTALLATION_KEY]: figmaTarget.value });
+});
 
 toggle.addEventListener("change", () => {
   chrome.storage.local.set({ [STORAGE_KEY]: toggle.checked }, () => {
@@ -151,6 +183,7 @@ disconnectAccountBtn.addEventListener("click", async () => {
     const res = await sendRuntimeMessage({ type: "WEB_TO_FIGMA_CLOUD_DISCONNECT" });
     if (!res || !res.ok) throw new Error((res && res.error) || "断开失败");
     setCloudStatus("已断开本机扩展连接。");
+    renderFigmaTargets([]);
   } catch (error) {
     setCloudStatus(`断开失败：${error.message || error}`);
   } finally {
@@ -176,7 +209,9 @@ captureBtn.addEventListener("click", () => {
 
   setBusy(true);
   setStatus("");
-  chrome.runtime.sendMessage({ type: "FIGMA_CAPTURE_START" }, (res) => {
+  chrome.runtime.sendMessage(
+    { type: "FIGMA_CAPTURE_START", targetInstallationId: figmaTarget.value || null },
+    (res) => {
     setBusy(false);
 
     const err = chrome.runtime.lastError;
@@ -190,10 +225,26 @@ captureBtn.addEventListener("click", () => {
       return;
     }
 
+    if (res.handoff) {
+      pendingCopyPayload = null;
+      setStatus("已加密发送到选定的 Figma 插件。请回到 Figma 领取并导入。");
+      setTimeout(() => window.close(), 1100);
+      return;
+    }
+
+    if (!res.payload) {
+      setStatus(`任务中转失败：${res.handoffError?.message || "没有可导入的采集结果"}`);
+      return;
+    }
+
     copyPayloadForFigma(res.payload)
       .then(() => {
         pendingCopyPayload = null;
-        setStatus("已复制转换结果，请回到 Figma 插件点击“导入剪贴板”。");
+        setStatus(
+          res.handoffError
+            ? `云端发送失败，已改用剪贴板：${res.handoffError.message}`
+            : "已复制转换结果，请回到 Figma 插件点击“导入剪贴板”。"
+        );
         setTimeout(() => window.close(), 900);
       })
       .catch((error) => {
@@ -201,5 +252,6 @@ captureBtn.addEventListener("click", () => {
         captureBtn.textContent = "复制结果";
         setStatus(`采集完成，但自动复制失败：${error.message || error}。请点击“复制结果”。`);
       });
-  });
+    }
+  );
 });

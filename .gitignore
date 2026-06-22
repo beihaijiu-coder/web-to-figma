@@ -4,6 +4,7 @@ node_modules/
 *.log
 figma-capture-*.json
 dist/
+marketing-site/dist-dev/
 .data/
 .env
 .env.*

@@ -30,6 +30,8 @@ export type ConversionJobSummary = {
   scenePackageVersion: number | null;
   packageSizeBytes: number | null;
   packageSha256: string | null;
+  packageEncryptionKey: string;
+  packageEncryptionAlgorithm: "A256GCM";
   createdAt: string;
 };
 
@@ -45,7 +47,9 @@ export class ConversionJobError extends Error {
     | "TARGET_INSTALLATION_NOT_FOUND"
     | "JOB_NOT_FOUND"
     | "JOB_NOT_READY"
-    | "JOB_ALREADY_FINAL";
+    | "JOB_ALREADY_FINAL"
+    | "ACTIVE_JOB_LIMIT_REACHED"
+    | "IDEMPOTENCY_CONFLICT";
 
   constructor(code: ConversionJobError["code"]) {
     super(code);
@@ -60,14 +64,21 @@ export interface ConversionJobRepository {
     targetInstallationId: string;
     idempotencyKey: string;
     scenePackageVersion: number | null;
+    packageEncryptionKey: string;
     now: Date;
     ttlSeconds: number;
+    maxActiveJobs: number;
   }): Promise<ConversionJobSummary>;
   markUploadComplete(input: {
     principal: DevicePrincipal;
     jobId: string;
     packageSizeBytes: number;
     packageSha256: string;
+    now: Date;
+  }): Promise<ConversionJobSummary>;
+  getUploadForSource(input: {
+    principal: DevicePrincipal;
+    jobId: string;
     now: Date;
   }): Promise<ConversionJobSummary>;
   listPendingForTarget(input: { principal: DevicePrincipal; now: Date }): Promise<ConversionJobSummary[]>;
@@ -80,6 +91,13 @@ export interface ConversionJobRepository {
     terminalStatus: "import_failed" | "cancelled";
     now: Date;
   }): Promise<ConversionJobSummary>;
+  markSourceFailed(input: {
+    principal: DevicePrincipal;
+    jobId: string;
+    now: Date;
+  }): Promise<ConversionJobSummary>;
+  markPackageRemoved(input: { objectKey: string; now: Date }): Promise<void>;
+  expireStale(now: Date): Promise<string[]>;
 }
 
 export type PackageStorage = {

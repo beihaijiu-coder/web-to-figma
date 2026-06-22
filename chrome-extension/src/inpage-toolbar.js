@@ -5,6 +5,7 @@
   const STORAGE_PROXY_KEY = "enableAssetProxyFetch";
   const STORAGE_CONCURRENCY_KEY = "proxyFetchConcurrency";
   const STORAGE_QUALITY_KEY = "captureQualityMode";
+  const STORAGE_TARGET_KEY = "webToFigmaTargetInstallationId";
   const PROGRESS_EVENT = "__FIGMA_CAPTURE_PROGRESS__";
   const STOP_SCROLL_KEY = "__FIGMA_CAPTURE_STOP_SCROLL_REQUESTED__";
   const DEFAULT_CONCURRENCY = "8";
@@ -12,6 +13,7 @@
   const ALLOWED = new Set(["4", "6", "8", "10", "12", "16", "20", "infinite"]);
   const ALLOWED_QUALITY = new Set(["standard", "hd"]);
   let activeSelectionCleanup = null;
+  let targetInstallationId = "";
 
   function normalizeConcurrency(value) {
     const str = String(value ?? "");
@@ -433,6 +435,7 @@
         <div class="actions" data-figma-capture-ignore="1">
           <button class="capture" id="figmaCaptureBtn" type="button" data-figma-capture-ignore="1">捕获当前网页</button>
           <button class="capture secondary" id="figmaSelectBtn" type="button" data-figma-capture-ignore="1">选择组件</button>
+          <button class="capture continue" id="figmaAccountBtn" type="button" data-figma-capture-ignore="1">账号与发送目标</button>
           <button class="capture stop-scroll hidden" id="figmaStopScrollBtn" type="button" data-figma-capture-ignore="1">停止滚动并生成</button>
           <button class="capture continue hidden" id="figmaContinueFlowBtn" type="button" data-figma-capture-ignore="1">继续采集下一段</button>
         </div>
@@ -750,6 +753,7 @@
   const concurrencyRow = root.querySelector("#figmaConcurrencyRow");
   const captureBtn = root.querySelector("#figmaCaptureBtn");
   const selectBtn = root.querySelector("#figmaSelectBtn");
+  const accountBtn = root.querySelector("#figmaAccountBtn");
   const stopScrollBtn = root.querySelector("#figmaStopScrollBtn");
   const continueFlowBtn = root.querySelector("#figmaContinueFlowBtn");
   const copyCard = root.querySelector("#figmaCopyCard");
@@ -775,6 +779,7 @@
     toggle.disabled = busy;
     concurrency.disabled = busy;
     selectBtn.disabled = busy;
+    accountBtn.disabled = busy;
     stopScrollBtn.disabled = !stopScrollAvailable || stopScrollRequested;
     continueFlowBtn.disabled = busy || !pendingContentFlow;
     copyBtn.disabled = busy || !pendingCopyPayload;
@@ -839,6 +844,7 @@
           selector,
           contentFlow,
         },
+        targetInstallationId: targetInstallationId || null,
       },
       (res) => {
         setStopScrollAvailable(false);
@@ -857,6 +863,19 @@
           return;
         }
 
+        if (res.handoff) {
+          pendingCopyPayload = null;
+          setContinueFlow(res.contentFlow || null);
+          setCopyCard(false);
+          setStatus("已加密发送到目标 Figma 插件，请回到 Figma 领取导入。", "success");
+          return;
+        }
+
+        if (!res.payload) {
+          setStatus(`任务中转失败：${res.handoffError?.message || "没有可导入的采集结果"}`, "error");
+          return;
+        }
+
         copyCanvasSvgForFigma(res.payload)
           .then(() => {
             pendingCopyPayload = res.payload;
@@ -868,6 +887,8 @@
             setStatus(
               flow
                 ? flowStatusText(flow, summary)
+                : res.handoffError
+                ? `云端发送失败，已改用剪贴板：${res.handoffError.message}`
                 : summary === "已复制转换结果。"
                 ? "已复制为 SVG，请回到 Figma 画布直接粘贴。"
                 : `已复制为 SVG，请回到 Figma 画布直接粘贴。${summary}`,
@@ -1030,14 +1051,22 @@
       [STORAGE_PROXY_KEY]: false,
       [STORAGE_CONCURRENCY_KEY]: DEFAULT_CONCURRENCY,
       [STORAGE_QUALITY_KEY]: DEFAULT_QUALITY,
+      [STORAGE_TARGET_KEY]: "",
     },
     (res) => {
       toggle.checked = Boolean(res[STORAGE_PROXY_KEY]);
       quality.value = normalizeQuality(res[STORAGE_QUALITY_KEY]);
       concurrency.value = normalizeConcurrency(res[STORAGE_CONCURRENCY_KEY]);
+      targetInstallationId = String(res[STORAGE_TARGET_KEY] || "");
       syncProxyDependentUI(toggle, concurrencyRow);
     }
   );
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes?.[STORAGE_TARGET_KEY]) {
+      targetInstallationId = String(changes[STORAGE_TARGET_KEY].newValue || "");
+    }
+  });
 
   quality.addEventListener("change", () => {
     const value = normalizeQuality(quality.value);
@@ -1076,6 +1105,14 @@
   captureBtn.addEventListener("click", () => {
     if (copyPendingPayload()) return;
     startCapture("body");
+  });
+
+  accountBtn.addEventListener("click", () => {
+    chrome.runtime.sendMessage({ type: "WEB_TO_FIGMA_CLOUD_OPEN_SETTINGS" }, (response) => {
+      if (chrome.runtime.lastError || !response?.ok) {
+        setStatus(`无法打开账号设置：${chrome.runtime.lastError?.message || response?.error || "未知错误"}`, "error");
+      }
+    });
   });
 
   continueFlowBtn.addEventListener("click", () => {

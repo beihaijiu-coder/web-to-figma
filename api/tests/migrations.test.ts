@@ -8,7 +8,12 @@ test("migrations are ordered and create the identity and usage tables", async ()
   const migrations = await loadMigrations();
   assert.deepEqual(
     migrations.map((migration) => migration.name),
-    ["0001_identity_and_entitlements.sql", "0002_conversion_usage.sql", "0003_device_connections.sql"]
+    [
+      "0001_identity_and_entitlements.sql",
+      "0002_conversion_usage.sql",
+      "0003_device_connections.sql",
+      "0004_conversion_package_encryption.sql",
+    ]
   );
 
   const database = await migratedPglite();

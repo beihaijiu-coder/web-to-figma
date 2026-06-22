@@ -50,9 +50,14 @@ const refreshTokenSchema = z.object({
 const createConversionJobSchema = z.object({
   targetInstallationId: z.string().uuid(),
   scenePackageVersion: z.number().int().min(1).max(100).optional(),
+  packageEncryptionKey: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{43}$/)
+    .refine((value) => Buffer.from(value, "base64url").length === 32),
 });
 
 const paramsWithJobIdSchema = z.object({ jobId: z.string().uuid() });
+const paramsWithInstallationIdSchema = z.object({ installationId: z.string().uuid() });
 const listInstallationsQuerySchema = z.object({
   clientType: z.enum(CLIENT_TYPES).optional(),
 });
@@ -82,12 +87,22 @@ function sha256Hex(body: Buffer): string {
   return createHash("sha256").update(body).digest("hex");
 }
 
+function isCorsOriginAllowed(origin: string, allowedOrigins: Set<string>): boolean {
+  if (allowedOrigins.has(origin)) return true;
+  return allowedOrigins.has("chrome-extension://*") && /^chrome-extension:\/\/[a-p]{32}$/.test(origin);
+}
+
 function mapConversionError(error: unknown) {
   if (error instanceof QuotaExceededError) {
     return { status: 402, body: errorBody("QUOTA_EXCEEDED", "Free weekly quota has been used") };
   }
   if (error instanceof ConversionJobError) {
-    const status = error.code === "TARGET_INSTALLATION_NOT_FOUND" || error.code === "JOB_NOT_FOUND" ? 404 : 409;
+    const status =
+      error.code === "TARGET_INSTALLATION_NOT_FOUND" || error.code === "JOB_NOT_FOUND"
+        ? 404
+        : error.code === "ACTIVE_JOB_LIMIT_REACHED"
+          ? 429
+          : 409;
     return { status, body: errorBody(error.code, error.message) };
   }
   return null;
@@ -104,10 +119,10 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
   const allowedOrigins = new Set(dependencies.config.corsAllowedOrigins);
   await api.register(cors, {
     credentials: true,
-    methods: ["GET", "POST", "PUT", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Authorization", "Content-Type", "Idempotency-Key"],
     origin(origin, callback) {
-      if (!origin || allowedOrigins.has(origin)) {
+      if (!origin || isCorsOriginAllowed(origin, allowedOrigins)) {
         callback(null, true);
         return;
       }
@@ -258,11 +273,58 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
       });
       return reply.code(200).send({ installations });
     });
+
+    api.delete("/v1/device/me", async (request, reply) => {
+      const principal = await requireAnyDevicePrincipal(deviceConnections, request.headers.authorization);
+      if (!principal) return reply.code(401).send(errorBody("UNAUTHORIZED", "Device token required"));
+      await deviceConnections.revokeOwnInstallation(principal);
+      return reply.code(200).send({ status: "revoked" });
+    });
+
+    api.get("/v1/me/installations", async (request, reply) => {
+      let identity;
+      try {
+        identity = await dependencies.authenticator.authenticate(request.headers.authorization);
+      } catch {
+        return reply.code(401).send(errorBody("UNAUTHORIZED", "Authentication required"));
+      }
+      if (!identity) return reply.code(401).send(errorBody("UNAUTHORIZED", "Authentication required"));
+      const currentUser = await dependencies.currentUsers.resolveCurrentUser(identity);
+      const installations = await deviceConnections.listUserInstallations(currentUser.user.id);
+      return reply.code(200).send({ installations });
+    });
+
+    api.delete("/v1/me/installations/:installationId", async (request, reply) => {
+      let identity;
+      try {
+        identity = await dependencies.authenticator.authenticate(request.headers.authorization);
+      } catch {
+        return reply.code(401).send(errorBody("UNAUTHORIZED", "Authentication required"));
+      }
+      if (!identity) return reply.code(401).send(errorBody("UNAUTHORIZED", "Authentication required"));
+      const params = paramsWithInstallationIdSchema.safeParse(request.params);
+      if (!params.success) return reply.code(400).send(errorBody("INVALID_REQUEST", "Invalid installation id"));
+      const currentUser = await dependencies.currentUsers.resolveCurrentUser(identity);
+      const revoked = await deviceConnections.revokeInstallation({
+        userId: currentUser.user.id,
+        installationId: params.data.installationId,
+      });
+      if (!revoked) return reply.code(404).send(errorBody("INSTALLATION_NOT_FOUND", "Installation was not found"));
+      return reply.code(200).send({ status: "revoked" });
+    });
   }
 
   if (dependencies.deviceConnections && dependencies.conversionJobs && dependencies.packageStorage) {
     const conversionJobs = dependencies.conversionJobs;
     const packageStorage = dependencies.packageStorage;
+    async function removeStoredPackage(objectKey: string): Promise<void> {
+      try {
+        await packageStorage.remove(objectKey);
+        await conversionJobs.markPackageRemoved({ objectKey, now: new Date() });
+      } catch (error) {
+        api.log.warn({ err: error }, "conversion package cleanup deferred");
+      }
+    }
     const deviceAuth = dependencies.deviceConnections;
 
     api.addContentTypeParser("application/octet-stream", { parseAs: "buffer" }, (_request, body, done) => {
@@ -285,8 +347,10 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
           targetInstallationId: parsed.data.targetInstallationId,
           idempotencyKey: idempotencyKey.trim(),
           scenePackageVersion: parsed.data.scenePackageVersion ?? null,
+          packageEncryptionKey: parsed.data.packageEncryptionKey,
           now: new Date(),
           ttlSeconds: dependencies.config.conversions.jobTtlSeconds,
+          maxActiveJobs: dependencies.config.conversions.maxActiveJobs,
         });
         return reply.code(201).send({
           taskId: job.id,
@@ -306,7 +370,10 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
       }
     });
 
-    api.put("/v1/conversion-jobs/:jobId/package", async (request, reply) => {
+    api.put(
+      "/v1/conversion-jobs/:jobId/package",
+      { bodyLimit: dependencies.config.conversions.maxScenePackageBytes },
+      async (request, reply) => {
       const principal = await requireDevicePrincipal(deviceAuth, request.headers.authorization, "chrome_extension");
       if (!principal) return reply.code(401).send(errorBody("UNAUTHORIZED", "Chrome extension token required"));
       const params = paramsWithJobIdSchema.safeParse(request.params);
@@ -317,15 +384,54 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
         return reply.code(413).send(errorBody("PACKAGE_TOO_LARGE", "Scene package exceeds the configured limit"));
       }
       try {
-        const job = await conversionJobs.markUploadComplete({
+        const packageSha256 = sha256Hex(request.body);
+        const uploadJob = await conversionJobs.getUploadForSource({
           principal,
           jobId: params.data.jobId,
-          packageSizeBytes: request.body.length,
-          packageSha256: sha256Hex(request.body),
           now: new Date(),
         });
-        await packageStorage.write(job.objectKey, request.body);
-        return reply.code(200).send({ taskId: job.id, status: job.status, packageSha256: job.packageSha256 });
+        if (uploadJob.status === "uploaded") {
+          if (uploadJob.packageSizeBytes !== request.body.length || uploadJob.packageSha256 !== packageSha256) {
+            throw new ConversionJobError("JOB_ALREADY_FINAL");
+          }
+          return reply.code(200).send({
+            taskId: uploadJob.id,
+            status: uploadJob.status,
+            packageSha256: uploadJob.packageSha256,
+          });
+        }
+        try {
+          await packageStorage.write(uploadJob.objectKey, request.body);
+          const job = await conversionJobs.markUploadComplete({
+            principal,
+            jobId: params.data.jobId,
+            packageSizeBytes: request.body.length,
+            packageSha256,
+            now: new Date(),
+          });
+          return reply.code(200).send({ taskId: job.id, status: job.status, packageSha256: job.packageSha256 });
+        } catch (error) {
+          await conversionJobs.markSourceFailed({ principal, jobId: uploadJob.id, now: new Date() }).catch(() => undefined);
+          await removeStoredPackage(uploadJob.objectKey);
+          throw error;
+        }
+      } catch (error) {
+        const mapped = mapConversionError(error);
+        if (mapped) return reply.code(mapped.status).send(mapped.body);
+        throw error;
+      }
+      }
+    );
+
+    api.post("/v1/conversion-jobs/:jobId/capture-failed", async (request, reply) => {
+      const principal = await requireDevicePrincipal(deviceAuth, request.headers.authorization, "chrome_extension");
+      if (!principal) return reply.code(401).send(errorBody("UNAUTHORIZED", "Chrome extension token required"));
+      const params = paramsWithJobIdSchema.safeParse(request.params);
+      if (!params.success) return reply.code(400).send(errorBody("INVALID_REQUEST", "Invalid task id"));
+      try {
+        const job = await conversionJobs.markSourceFailed({ principal, jobId: params.data.jobId, now: new Date() });
+        await removeStoredPackage(job.objectKey);
+        return reply.code(200).send({ taskId: job.id, status: job.status });
       } catch (error) {
         const mapped = mapConversionError(error);
         if (mapped) return reply.code(mapped.status).send(mapped.body);
@@ -337,7 +443,17 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
       const principal = await requireDevicePrincipal(deviceAuth, request.headers.authorization, "figma_plugin");
       if (!principal) return reply.code(401).send(errorBody("UNAUTHORIZED", "Figma plugin token required"));
       const jobs = await conversionJobs.listPendingForTarget({ principal, now: new Date() });
-      return reply.code(200).send({ jobs });
+      return reply.code(200).send({
+        jobs: jobs.map((job) => ({
+          id: job.id,
+          status: job.status,
+          expiresAt: job.expiresAt,
+          scenePackageVersion: job.scenePackageVersion,
+          packageSizeBytes: job.packageSizeBytes,
+          packageSha256: job.packageSha256,
+          createdAt: job.createdAt,
+        })),
+      });
     });
 
     api.post("/v1/conversion-jobs/:jobId/claim", async (request, reply) => {
@@ -351,6 +467,11 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
           taskId: job.id,
           status: job.status,
           download: { method: "GET", url: `/v1/conversion-jobs/${job.id}/package` },
+          encryption: {
+            algorithm: job.packageEncryptionAlgorithm,
+            key: job.packageEncryptionKey,
+          },
+          packageSha256: job.packageSha256,
         });
       } catch (error) {
         const mapped = mapConversionError(error);
@@ -384,9 +505,15 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
       if (!principal) return reply.code(401).send(errorBody("UNAUTHORIZED", "Figma plugin token required"));
       const params = paramsWithJobIdSchema.safeParse(request.params);
       if (!params.success) return reply.code(400).send(errorBody("INVALID_REQUEST", "Invalid task id"));
-      const job = await conversionJobs.markImported({ principal, jobId: params.data.jobId, now: new Date() });
-      await packageStorage.remove(job.objectKey);
-      return reply.code(200).send({ taskId: job.id, status: job.status });
+      try {
+        const job = await conversionJobs.markImported({ principal, jobId: params.data.jobId, now: new Date() });
+        await removeStoredPackage(job.objectKey);
+        return reply.code(200).send({ taskId: job.id, status: job.status });
+      } catch (error) {
+        const mapped = mapConversionError(error);
+        if (mapped) return reply.code(mapped.status).send(mapped.body);
+        throw error;
+      }
     });
 
     api.post("/v1/conversion-jobs/:jobId/failed", async (request, reply) => {
@@ -394,14 +521,41 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
       if (!principal) return reply.code(401).send(errorBody("UNAUTHORIZED", "Figma plugin token required"));
       const params = paramsWithJobIdSchema.safeParse(request.params);
       if (!params.success) return reply.code(400).send(errorBody("INVALID_REQUEST", "Invalid task id"));
-      const job = await conversionJobs.markFailed({
-        principal,
-        jobId: params.data.jobId,
-        terminalStatus: "import_failed",
-        now: new Date(),
-      });
-      await packageStorage.remove(job.objectKey);
-      return reply.code(200).send({ taskId: job.id, status: job.status });
+      try {
+        const job = await conversionJobs.markFailed({
+          principal,
+          jobId: params.data.jobId,
+          terminalStatus: "import_failed",
+          now: new Date(),
+        });
+        await removeStoredPackage(job.objectKey);
+        return reply.code(200).send({ taskId: job.id, status: job.status });
+      } catch (error) {
+        const mapped = mapConversionError(error);
+        if (mapped) return reply.code(mapped.status).send(mapped.body);
+        throw error;
+      }
+    });
+
+    api.post("/v1/conversion-jobs/:jobId/cancelled", async (request, reply) => {
+      const principal = await requireDevicePrincipal(deviceAuth, request.headers.authorization, "figma_plugin");
+      if (!principal) return reply.code(401).send(errorBody("UNAUTHORIZED", "Figma plugin token required"));
+      const params = paramsWithJobIdSchema.safeParse(request.params);
+      if (!params.success) return reply.code(400).send(errorBody("INVALID_REQUEST", "Invalid task id"));
+      try {
+        const job = await conversionJobs.markFailed({
+          principal,
+          jobId: params.data.jobId,
+          terminalStatus: "cancelled",
+          now: new Date(),
+        });
+        await removeStoredPackage(job.objectKey);
+        return reply.code(200).send({ taskId: job.id, status: job.status });
+      } catch (error) {
+        const mapped = mapConversionError(error);
+        if (mapped) return reply.code(mapped.status).send(mapped.body);
+        throw error;
+      }
     });
   }
 

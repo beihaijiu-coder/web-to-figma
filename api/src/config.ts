@@ -13,9 +13,12 @@ const environmentSchema = z.object({
     ),
   CLERK_PUBLISHABLE_KEY: z.string().min(1, "CLERK_PUBLISHABLE_KEY is required"),
   CLERK_SECRET_KEY: z.string().min(1, "CLERK_SECRET_KEY is required"),
-  CLERK_AUTHORIZED_PARTIES: z.string().min(1, "CLERK_AUTHORIZED_PARTIES is required"),
+  CLERK_AUTHORIZED_PARTIES: z.string().min(1, "CLERK_AUTHORIZED_PARTIES is required").default("http://localhost:4173"),
   CLERK_AUDIENCE: z.string().optional().default(""),
-  CORS_ALLOWED_ORIGINS: z.string().min(1, "CORS_ALLOWED_ORIGINS is required"),
+  CORS_ALLOWED_ORIGINS: z
+    .string()
+    .min(1, "CORS_ALLOWED_ORIGINS is required")
+    .default("http://localhost:4173,null,chrome-extension://*"),
   PUBLIC_WEB_URL: z.string().url().default("http://localhost:4173"),
   DEVICE_CONNECTION_TTL_SECONDS: z.coerce.number().int().min(60).max(3_600).default(600),
   DEVICE_POLL_INTERVAL_SECONDS: z.coerce.number().int().min(3).max(60).default(5),
@@ -23,6 +26,7 @@ const environmentSchema = z.object({
   REFRESH_TOKEN_TTL_SECONDS: z.coerce.number().int().min(3_600).max(31_536_000).default(2_592_000),
   CONVERSION_JOB_TTL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(1_800),
   MAX_SCENE_PACKAGE_BYTES: z.coerce.number().int().min(1_024).max(104_857_600).default(26_214_400),
+  MAX_ACTIVE_CONVERSION_JOBS: z.coerce.number().int().min(1).max(20).default(3),
   PACKAGE_STORAGE_DIR: z.string().min(1).default(".data/packages"),
 });
 
@@ -48,6 +52,7 @@ export type ApiConfig = {
   conversions: {
     jobTtlSeconds: number;
     maxScenePackageBytes: number;
+    maxActiveJobs: number;
     packageStorageDir: string;
   };
 };
@@ -66,12 +71,33 @@ function commaSeparated(value: string): string[] {
   return [...new Set(value.split(",").map((item) => item.trim()).filter(Boolean))];
 }
 
-function originList(value: string, variableName: string, environment: ApiConfig["environment"]): string[] {
+function originList(
+  value: string,
+  variableName: string,
+  environment: ApiConfig["environment"],
+  options: { allowClientOrigins?: boolean } = {}
+): string[] {
   const rawOrigins = commaSeparated(value);
   const origins: string[] = [];
   const issues: string[] = [];
 
   for (const rawOrigin of rawOrigins) {
+    if (options.allowClientOrigins && rawOrigin === "null") {
+      origins.push(rawOrigin);
+      continue;
+    }
+    if (options.allowClientOrigins && rawOrigin === "chrome-extension://*") {
+      if (environment === "production") {
+        issues.push(`${variableName} cannot use chrome-extension://* in production`);
+      } else {
+        origins.push(rawOrigin);
+      }
+      continue;
+    }
+    if (options.allowClientOrigins && /^chrome-extension:\/\/[a-p]{32}$/.test(rawOrigin)) {
+      origins.push(rawOrigin);
+      continue;
+    }
     try {
       const parsed = new URL(rawOrigin);
       if (parsed.origin !== rawOrigin || parsed.pathname !== "/" || parsed.search || parsed.hash) {
@@ -119,7 +145,8 @@ export function createConfig(environment: NodeJS.ProcessEnv = process.env): ApiC
   const corsAllowedOrigins = originList(
     parsed.data.CORS_ALLOWED_ORIGINS,
     "CORS_ALLOWED_ORIGINS",
-    parsed.data.NODE_ENV
+    parsed.data.NODE_ENV,
+    { allowClientOrigins: true }
   );
   const audience = commaSeparated(parsed.data.CLERK_AUDIENCE);
 
@@ -153,6 +180,7 @@ export function createConfig(environment: NodeJS.ProcessEnv = process.env): ApiC
     conversions: {
       jobTtlSeconds: parsed.data.CONVERSION_JOB_TTL_SECONDS,
       maxScenePackageBytes: parsed.data.MAX_SCENE_PACKAGE_BYTES,
+      maxActiveJobs: parsed.data.MAX_ACTIVE_CONVERSION_JOBS,
       packageStorageDir: parsed.data.PACKAGE_STORAGE_DIR,
     },
   };

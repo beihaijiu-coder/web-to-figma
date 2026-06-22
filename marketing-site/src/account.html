@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>Web to Figma 账号</title>
+    <link rel="canonical" href="{{CANONICAL_URL}}" />
+    <link rel="icon" href="../assets/web-to-figma-icon.png" sizes="128x128" type="image/png" />
+    <link rel="stylesheet" href="../styles.css" />
+    <script id="account-config" type="application/json">{{ACCOUNT_CONFIG_JSON}}</script>
+    <script src="../account.js" defer></script>
+  </head>
+  <body class="connect-page">
+    <main class="connect-shell" aria-labelledby="account-title">
+      <a class="brand connect-brand" href="../" aria-label="Web to Figma 首页">
+        <img src="../assets/web-to-figma-icon.png" width="32" height="32" alt="" />
+        <span>Web to Figma</span>
+      </a>
+
+      <section class="connect-card account-card">
+        <p class="eyebrow">个人账号</p>
+        <h1 id="account-title">登录并查看当前权益</h1>
+        <p class="lead connect-lead">登录身份由 Clerk 验证；套餐和每周转换额度始终由 Web to Figma API 返回。</p>
+
+        <div id="authMount" class="auth-mount"></div>
+
+        <dl id="accountSummary" class="account-summary" hidden>
+          <div><dt>套餐</dt><dd id="planValue">—</dd></div>
+          <div><dt>本周已完成</dt><dd id="usedValue">—</dd></div>
+          <div><dt>本周剩余</dt><dd id="remainingValue">—</dd></div>
+        </dl>
+        <section id="installationSection" class="installation-section" hidden aria-labelledby="installation-title">
+          <h2 id="installation-title">已连接的客户端</h2>
+          <div id="installationList" class="installation-list"></div>
+        </section>
+        <p id="accountStatus" class="connect-status" aria-live="polite"></p>
+      </section>
+    </main>
+  </body>
+</html>

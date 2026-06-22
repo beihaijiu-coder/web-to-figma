@@ -106,8 +106,8 @@ test("current user upsert creates one internal Free user and reports weekly quot
   assert.equal(afterUsage.quota.remaining, 0);
 
   await database.query(
-    "UPDATE entitlements SET plan = 'pro', subscription_status = 'active', billing_period = 'month' WHERE user_id = $1",
-    [first.user.id]
+    "UPDATE entitlements SET plan = 'pro', subscription_status = 'active', billing_period = 'month', current_period_end = $2 WHERE user_id = $1",
+    [first.user.id, new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)]
   );
   const pro = await repository.resolveCurrentUser(
     { clerkUserId: "user_clerk_1", sessionId: "sess_4", email: "first@example.com" },
@@ -115,6 +115,17 @@ test("current user upsert creates one internal Free user and reports weekly quot
   );
   assert.equal(pro.entitlement.plan, "pro");
   assert.equal(pro.quota.unlimited, true);
+
+  await database.query(
+    "UPDATE entitlements SET subscription_status = 'past_due' WHERE user_id = $1",
+    [first.user.id]
+  );
+  const pastDue = await repository.resolveCurrentUser(
+    { clerkUserId: "user_clerk_1", sessionId: "sess_5", email: "first@example.com" },
+    now
+  );
+  assert.equal(pastDue.entitlement.plan, "pro");
+  assert.equal(pastDue.quota.unlimited, false);
 
   await database.close();
 });

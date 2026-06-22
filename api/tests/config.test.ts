@@ -11,7 +11,7 @@ const baseEnvironment = {
   CLERK_PUBLISHABLE_KEY: "pk_test_example",
   CLERK_SECRET_KEY: "sk_test_example",
   CLERK_AUTHORIZED_PARTIES: "http://localhost:4173, https://app.example.com",
-  CORS_ALLOWED_ORIGINS: "http://localhost:4173, https://app.example.com",
+  CORS_ALLOWED_ORIGINS: "http://localhost:4173, https://app.example.com, null, chrome-extension://*",
   CLERK_AUDIENCE: "web-to-figma-web",
   PUBLIC_WEB_URL: "http://localhost:4173",
 };
@@ -23,7 +23,12 @@ test("configuration parses origin lists and optional audience", () => {
     "http://localhost:4173",
     "https://app.example.com",
   ]);
-  assert.deepEqual(config.corsAllowedOrigins, ["http://localhost:4173", "https://app.example.com"]);
+  assert.deepEqual(config.corsAllowedOrigins, [
+    "http://localhost:4173",
+    "https://app.example.com",
+    "null",
+    "chrome-extension://*",
+  ]);
   assert.deepEqual(config.clerk.audience, ["web-to-figma-web"]);
   assert.equal(config.device.connectionTtlSeconds, 600);
 });
@@ -51,5 +56,20 @@ test("production configuration rejects insecure origins and missing audience", (
         CLERK_AUDIENCE: "",
       }),
     (error) => error instanceof ConfigurationError && error.issues.some((issue) => issue.includes("HTTPS"))
+  );
+});
+
+test("production CORS requires a concrete published Chrome extension origin", () => {
+  assert.throws(
+    () =>
+      createConfig({
+        ...baseEnvironment,
+        NODE_ENV: "production",
+        CLERK_AUTHORIZED_PARTIES: "https://app.example.com",
+        CORS_ALLOWED_ORIGINS: "https://app.example.com,null,chrome-extension://*",
+      }),
+    (error) =>
+      error instanceof ConfigurationError &&
+      error.issues.some((issue) => issue.includes("cannot use chrome-extension://*"))
   );
 });

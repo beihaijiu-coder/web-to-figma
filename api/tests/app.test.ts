@@ -113,6 +113,27 @@ test("CORS rejects unconfigured browser origins", async () => {
   await api.close();
 });
 
+test("CORS accepts the Figma null origin and development Chrome extension origins", async () => {
+  const api = await testApi();
+  const figmaResponse = await api.inject({
+    method: "GET",
+    url: "/health",
+    headers: { origin: "null" },
+  });
+  const chromeOrigin = `chrome-extension://${"a".repeat(32)}`;
+  const chromeResponse = await api.inject({
+    method: "GET",
+    url: "/health",
+    headers: { origin: chromeOrigin },
+  });
+
+  assert.equal(figmaResponse.statusCode, 200);
+  assert.equal(figmaResponse.headers["access-control-allow-origin"], "null");
+  assert.equal(chromeResponse.statusCode, 200);
+  assert.equal(chromeResponse.headers["access-control-allow-origin"], chromeOrigin);
+  await api.close();
+});
+
 test("server failures do not expose database or provider details", async () => {
   const failingRepository: CurrentUserRepository = {
     async resolveCurrentUser() {

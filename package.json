@@ -11,6 +11,7 @@
     "test:figma": "node --test tests/figma-plugin/*.test.mjs",
     "test:site": "node --test tests/marketing-site/*.test.mjs",
     "dev:api": "npm run dev --workspace @web-to-figma/api",
+    "dev:site": "node marketing-site/dev.mjs",
     "build:api": "npm run build --workspace @web-to-figma/api",
     "check:api": "npm run check --workspace @web-to-figma/api",
     "migrate:api": "npm run migrate --workspace @web-to-figma/api",

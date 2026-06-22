@@ -4,12 +4,17 @@ import { visibleCaptureBounds } from "./core/screenshot-geometry.mjs";
 import {
   DEFAULT_API_BASE_URL,
   WebToFigmaApiError,
+  createConversionJob,
   createDeviceConnection,
+  encryptSceneCapture,
   getDeviceMe,
   listInstallations,
   normalizeApiBaseUrl,
+  markCaptureFailed,
   pollDeviceConnection,
   refreshDeviceTokens,
+  revokeOwnInstallation,
+  uploadScenePackage,
 } from "./cloud-client.mjs";
 
 const WORLD = "ISOLATED";
@@ -239,6 +244,67 @@ async function startCloudAccountConnection() {
     userCode: connection.userCode,
     verificationUriComplete: connection.verificationUriComplete,
   };
+}
+
+async function submitCaptureToCloud(payload, targetInstallationId) {
+  const baseUrl = await getCloudApiBaseUrl();
+  const accessToken = await getCloudAccessToken(baseUrl);
+  if (!accessToken) {
+    throw new WebToFigmaApiError("Connect the Chrome extension account before sending a cloud task", {
+      status: 401,
+      code: "CLOUD_ACCOUNT_REQUIRED",
+    });
+  }
+
+  const encrypted = await encryptSceneCapture(payload);
+  const idempotencyKey = `capture-${Date.now()}-${crypto.randomUUID()}`;
+  const job = await createConversionJob({
+    baseUrl,
+    accessToken,
+    targetInstallationId,
+    idempotencyKey,
+    packageEncryptionKey: encrypted.packageEncryptionKey,
+    scenePackageVersion: encrypted.version,
+  });
+
+  try {
+    if (encrypted.body.byteLength > Number(job.upload?.maxBytes || 0)) {
+      throw new WebToFigmaApiError("Encrypted scene package exceeds the task limit", {
+        status: 413,
+        code: "PACKAGE_TOO_LARGE",
+      });
+    }
+    const uploaded = await uploadScenePackage({
+      baseUrl,
+      accessToken,
+      upload: job.upload,
+      body: encrypted.body,
+    });
+    return {
+      taskId: job.taskId,
+      status: uploaded.status,
+      expiresAt: job.expiresAt,
+      targetInstallationId,
+      packageSizeBytes: encrypted.body.byteLength,
+    };
+  } catch (error) {
+    await markCaptureFailed({ baseUrl, accessToken, taskId: job.taskId }).catch(() => undefined);
+    throw error;
+  }
+}
+
+async function disconnectCloudAccount() {
+  const baseUrl = await getCloudApiBaseUrl();
+  const accessToken = await getCloudAccessToken(baseUrl);
+  if (accessToken) {
+    try {
+      await revokeOwnInstallation({ baseUrl, accessToken });
+    } catch (error) {
+      if (!(error instanceof WebToFigmaApiError) || error.status !== 401) throw error;
+    }
+  }
+  await clearCloudTokens();
+  return { ok: true, connected: false, apiBaseUrl: baseUrl, revoked: Boolean(accessToken) };
 }
 
 async function injectScriptFile(tabId, file) {
@@ -819,9 +885,14 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         return;
       }
 
+      if (msg.type === "WEB_TO_FIGMA_CLOUD_OPEN_SETTINGS") {
+        await chrome.tabs.create({ url: chrome.runtime.getURL("popup/popup.html") });
+        sendResponse({ ok: true });
+        return;
+      }
+
       if (msg.type === "WEB_TO_FIGMA_CLOUD_DISCONNECT") {
-        await clearCloudTokens();
-        sendResponse({ ok: true, connected: false, apiBaseUrl: await getCloudApiBaseUrl() });
+        sendResponse(await disconnectCloudAccount());
         return;
       }
 
@@ -860,9 +931,25 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       }
 
       const proxyEntries = figmaProxyDiagnostics.slice(proxyDiagStart);
+      let handoff = null;
+      let handoffError = null;
+      if (msg.targetInstallationId) {
+        try {
+          handoff = await submitCaptureToCloud(payload, msg.targetInstallationId);
+        } catch (error) {
+          handoffError = {
+            message: error?.message || String(error),
+            code: error?.code || "CLOUD_HANDOFF_FAILED",
+            status: error?.status || 0,
+          };
+        }
+      }
       sendResponse({
         ok: true,
-        payload,
+        payload: handoff ? undefined : payload,
+        handoff,
+        handoffError,
+        contentFlow: payload?.capture?.contentFlow || null,
         diagnostics: {
           preparation: diagnostics,
           payload: parseResultDiagnostics(payload),

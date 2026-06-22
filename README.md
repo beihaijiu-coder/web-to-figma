@@ -22,6 +22,7 @@ npm run test:api
 npm run check:api
 npm run migrate:api
 npm run dev:api
+npm run dev:site
 npm run package:extension
 SITE_URL=https://example.com npm run build:site
 ```
@@ -34,5 +35,8 @@ API 的本地密钥、设备连接和转换中转说明见 [`api/README.md`](api
 
 1. 在 `api/.env.local` 填入 Clerk 与 Neon 开发环境密钥。
 2. 运行 `npm run migrate:api`，再运行 `npm run dev:api`。
-3. 运行 `SITE_URL=https://example.com npm run build:site` 生成官网；正式域名未定前，连接页只作为本地开发入口使用。
+3. 在另一个终端运行 `npm run dev:site`，然后访问 `http://localhost:4173/account/` 验证 Google 登录与账号权益。
 4. Chrome 扩展 popup 和 Figma 插件 UI 默认请求 `http://localhost:8787`，点击 Connect account 会打开官网 `/connect/device/` 连接页。
+5. 两端均连接后，在 Chrome popup 选择目标 Figma 插件并采集。扩展会使用 AES-256-GCM 加密场景包并上传；回到 Figma 点击 `Import cloud task` 即可领取、校验、解密和导入。
+
+正式域名未确定前，`dev:site` 使用仅供本地开发的 canonical 占位域名；不会把它写入正式构建。正式构建仍需显式运行 `SITE_URL=https://你的域名 npm run build:site`。

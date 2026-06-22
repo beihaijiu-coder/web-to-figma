@@ -368,6 +368,7 @@
           <button id="connectAccountBtn" class="secondary" type="button">Connect account</button>
           <button id="disconnectAccountBtn" class="neutral" type="button">Disconnect</button>
         </div>
+        <button id="importCloudBtn" class="primary" type="button" disabled>Check cloud tasks</button>
         <p id="accountStatus" class="account-status" aria-live="polite"></p>
       </section>
       <button id="importClipboardBtn" class="primary" type="button">Import clipboard capture</button>
@@ -412,9 +413,13 @@
     const connectAccountBtn = document.getElementById("connectAccountBtn");
     const disconnectAccountBtn = document.getElementById("disconnectAccountBtn");
     const accountStatus = document.getElementById("accountStatus");
+    const importCloudBtn = document.getElementById("importCloudBtn");
     let lastPayload = null;
     let deviceAuth = null;
     let accountBusy = false;
+    let pendingCloudJobs = [];
+    let activeCloudTask = null;
+    let storedCloudTask = null;
 
     function postToMain(message) {
       parent.postMessage({ pluginMessage: message }, "*");
@@ -428,6 +433,7 @@
       accountBusy = busy;
       connectAccountBtn.disabled = busy;
       disconnectAccountBtn.disabled = busy;
+      importCloudBtn.disabled = busy || !deviceAuth;
     }
 
     function normalizeApiBaseUrl(rawValue) {
@@ -457,6 +463,60 @@
       return { status: response.status, body };
     }
 
+    async function apiBytes(path, accessToken) {
+      const baseUrl = normalizeApiBaseUrl(apiBaseUrl.value);
+      const response = await fetch(`${baseUrl}${path}`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body?.error?.message || `API request failed: HTTP ${response.status}`);
+      }
+      return {
+        body: new Uint8Array(await response.arrayBuffer()),
+        packageSha256: response.headers.get("x-scene-package-sha256") || null,
+      };
+    }
+
+    function decodeBase64Url(value) {
+      const normalized = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
+      const padded = normalized + "=".repeat((4 - (normalized.length % 4 || 4)) % 4);
+      return Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
+    }
+
+    async function sha256Hex(value) {
+      const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", value));
+      return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    }
+
+    async function decryptScenePackage(encryptedBody, keyValue) {
+      const magic = new Uint8Array([0x57, 0x32, 0x46, 0x31]);
+      const body = encryptedBody instanceof Uint8Array ? encryptedBody : new Uint8Array(encryptedBody);
+      if (body.length < 32 || !magic.every((byte, index) => body[index] === byte)) {
+        throw new Error("Scene package format is not supported.");
+      }
+      const rawKey = decodeBase64Url(keyValue);
+      if (rawKey.length !== 32) throw new Error("Scene package key is invalid.");
+      const iv = body.slice(4, 16);
+      const ciphertext = body.slice(16);
+      try {
+        const key = await crypto.subtle.importKey("raw", rawKey, "AES-GCM", false, ["decrypt"]);
+        const plaintext = await crypto.subtle.decrypt(
+          { name: "AES-GCM", iv, additionalData: magic, tagLength: 128 },
+          key,
+          ciphertext
+        );
+        const parsed = JSON.parse(new TextDecoder().decode(plaintext));
+        if (parsed?.source !== "web-to-figma" || parsed?.type !== "capture-scene" || !parsed.payload) {
+          throw new Error("Scene package payload is invalid.");
+        }
+        return parsed.payload;
+      } catch {
+        throw new Error("Scene package authentication or decryption failed.");
+      }
+    }
+
     function tokenExpiry(seconds) {
       return Date.now() + Math.max(0, Number(seconds || 0)) * 1000;
     }
@@ -470,17 +530,81 @@
         refreshTokenExpiresAt: tokenExpiry(tokens.refreshExpiresIn),
       };
       postToMain({ type: "save-device-auth", ...deviceAuth });
+      importCloudBtn.disabled = false;
     }
 
     async function refreshDeviceAuth(auth) {
       if (!auth?.refreshToken || Number(auth.refreshTokenExpiresAt || 0) <= Date.now()) return false;
       apiBaseUrl.value = auth.apiBaseUrl || apiBaseUrl.value;
+      deviceAuth = auth;
+      if (auth.accessToken && Number(auth.accessTokenExpiresAt || 0) > Date.now() + 30_000) {
+        importCloudBtn.disabled = false;
+        return true;
+      }
       const result = await apiJson("/v1/tokens/refresh", {
         method: "POST",
         body: { refreshToken: auth.refreshToken },
       });
       saveDeviceAuth(result.body);
       return true;
+    }
+
+    async function ensureDeviceAccessToken() {
+      if (deviceAuth?.accessToken && Number(deviceAuth.accessTokenExpiresAt || 0) > Date.now() + 30_000) {
+        return deviceAuth.accessToken;
+      }
+      if (!deviceAuth && storedCloudTask) throw new Error("Reconnect the Figma plugin account to finish the task.");
+      const refreshed = await refreshDeviceAuth(deviceAuth);
+      if (!refreshed || !deviceAuth?.accessToken) throw new Error("Connection expired. Please connect again.");
+      return deviceAuth.accessToken;
+    }
+
+    async function refreshPendingCloudJobs() {
+      if (!deviceAuth) {
+        pendingCloudJobs = [];
+        importCloudBtn.disabled = true;
+        importCloudBtn.textContent = "Check cloud tasks";
+        return [];
+      }
+      const accessToken = await ensureDeviceAccessToken();
+      const result = await apiJson("/v1/conversion-jobs/pending", { accessToken });
+      pendingCloudJobs = Array.isArray(result.body?.jobs) ? result.body.jobs : [];
+      importCloudBtn.disabled = false;
+      importCloudBtn.textContent = pendingCloudJobs.length
+        ? `Import cloud task (${pendingCloudJobs.length})`
+        : "Check cloud tasks";
+      setAccountStatus(
+        pendingCloudJobs.length
+          ? `${pendingCloudJobs.length} encrypted task${pendingCloudJobs.length === 1 ? "" : "s"} ready.`
+          : "Connected. No cloud task is waiting."
+      );
+      return pendingCloudJobs;
+    }
+
+    async function reportCloudTask(taskId, outcome) {
+      const accessToken = await ensureDeviceAccessToken();
+      const endpoint = outcome === "imported" ? "imported" : outcome === "cancelled" ? "cancelled" : "failed";
+      await apiJson(`/v1/conversion-jobs/${encodeURIComponent(taskId)}/${endpoint}`, {
+        method: "POST",
+        accessToken,
+      });
+      activeCloudTask = null;
+      storedCloudTask = null;
+      postToMain({ type: "clear-cloud-task" });
+      await refreshPendingCloudJobs();
+    }
+
+    async function recoverStoredCloudTask() {
+      if (!storedCloudTask?.taskId || !deviceAuth) return;
+      const status = storedCloudTask.status;
+      if (status === "importing" || status === "claimed") {
+        setAccountStatus("Cleaning an interrupted cloud import...");
+        postToMain({ type: "cleanup-stale-cloud-task", taskId: storedCloudTask.taskId });
+        return;
+      }
+      if (status === "imported_pending") await reportCloudTask(storedCloudTask.taskId, "imported");
+      if (status === "cancelled_pending") await reportCloudTask(storedCloudTask.taskId, "cancelled");
+      if (status === "failed_pending") await reportCloudTask(storedCloudTask.taskId, "failed");
     }
 
     async function pollDeviceConnection(deviceCode, intervalSeconds, expiresInSeconds) {
@@ -552,7 +676,7 @@
       throw new Error("Clipboard does not contain a Web to Figma capture.");
     }
 
-    function importPayload(payload) {
+    function importPayload(payload, cloudTaskId = null) {
       showProgress(payload);
       parent.postMessage(
         {
@@ -562,6 +686,7 @@
             layoutMode: layoutMode.value,
             overflowMode: overflowMode.value,
             fallbackFont: fallbackFontName(),
+            cloudTaskId,
           },
         },
         "*"
@@ -636,7 +761,7 @@
           result.body.interval,
           result.body.expiresIn
         );
-        setAccountStatus("Connected. This Figma plugin can receive tasks.");
+        await refreshPendingCloudJobs();
       } catch (error) {
         setAccountStatus(error.message || String(error));
       } finally {
@@ -644,10 +769,78 @@
       }
     };
 
-    disconnectAccountBtn.onclick = () => {
-      deviceAuth = null;
-      postToMain({ type: "clear-device-auth" });
-      setAccountStatus("Disconnected on this Figma plugin.");
+    disconnectAccountBtn.onclick = async () => {
+      if (activeCloudTask) {
+        setAccountStatus("Finish or cancel the active cloud import before disconnecting.");
+        return;
+      }
+      setAccountBusy(true);
+      try {
+        if (deviceAuth) {
+          const accessToken = await ensureDeviceAccessToken();
+          await apiJson("/v1/device/me", { method: "DELETE", accessToken });
+        }
+        deviceAuth = null;
+        postToMain({ type: "clear-device-auth" });
+        setAccountStatus("Disconnected and revoked on this Figma plugin.");
+        importCloudBtn.disabled = true;
+      } catch (error) {
+        setAccountStatus(error.message || String(error));
+      } finally {
+        setAccountBusy(false);
+      }
+    };
+
+    importCloudBtn.onclick = async () => {
+      if (accountBusy || activeCloudTask) return;
+      setAccountBusy(true);
+      let claimedTaskId = null;
+      try {
+        const jobs = pendingCloudJobs.length ? pendingCloudJobs : await refreshPendingCloudJobs();
+        const job = jobs[0];
+        if (!job) {
+          setAccountStatus("Connected. No cloud task is waiting.");
+          return;
+        }
+
+        const accessToken = await ensureDeviceAccessToken();
+        setAccountStatus("Claiming the encrypted task...");
+        const claim = await apiJson(`/v1/conversion-jobs/${encodeURIComponent(job.id)}/claim`, {
+          method: "POST",
+          accessToken,
+        });
+        claimedTaskId = claim.body.taskId;
+        if (claim.body?.encryption?.algorithm !== "A256GCM" || !claim.body?.encryption?.key) {
+          throw new Error("Task encryption metadata is missing.");
+        }
+
+        setAccountStatus("Downloading and verifying the encrypted task...");
+        const downloaded = await apiBytes(claim.body.download.url, accessToken);
+        const expectedSha256 = claim.body.packageSha256 || downloaded.packageSha256;
+        if (expectedSha256 && (await sha256Hex(downloaded.body)) !== expectedSha256) {
+          throw new Error("Task package checksum does not match.");
+        }
+        const payload = await decryptScenePackage(downloaded.body, claim.body.encryption.key);
+        activeCloudTask = { taskId: claimedTaskId };
+        storedCloudTask = { taskId: claimedTaskId, status: "claimed" };
+        postToMain({ type: "save-cloud-task", task: storedCloudTask });
+        pendingCloudJobs = pendingCloudJobs.filter((candidate) => candidate.id !== job.id);
+        importPayload(payload, claimedTaskId);
+      } catch (error) {
+        if (claimedTaskId) {
+          try {
+            activeCloudTask = { taskId: claimedTaskId };
+            await reportCloudTask(claimedTaskId, "failed");
+          } catch {
+            storedCloudTask = { taskId: claimedTaskId, status: "failed_pending" };
+          }
+        }
+        title.textContent = "Import failed";
+        subtitle.textContent = error.message || String(error);
+        setAccountStatus(error.message || String(error));
+      } finally {
+        setAccountBusy(false);
+      }
     };
 
     document.getElementById("importClipboardBtn").onclick = async () => {
@@ -710,7 +903,7 @@
     };
 
     retryBtn.onclick = () => {
-      if (lastPayload) importPayload(lastPayload);
+      if (lastPayload) importPayload(lastPayload, activeCloudTask?.taskId || null);
     };
 
     document.getElementById("closeBtn").onclick = () => {
@@ -727,9 +920,15 @@
           return;
         }
 
+        deviceAuth = msg.auth;
         refreshDeviceAuth(msg.auth)
-          .then((connected) => {
-            setAccountStatus(connected ? "Connected." : "Connection expired. Please connect again.");
+          .then(async (connected) => {
+            if (!connected) {
+              setAccountStatus("Connection expired. Please connect again.");
+              return;
+            }
+            await recoverStoredCloudTask();
+            if (!storedCloudTask) await refreshPendingCloudJobs();
           })
           .catch((error) => {
             deviceAuth = null;
@@ -741,6 +940,19 @@
 
       if (msg.type === "device-auth-cleared") {
         setAccountStatus("Not connected.");
+        importCloudBtn.disabled = true;
+        return;
+      }
+
+      if (msg.type === "cloud-task") {
+        storedCloudTask = msg.task || null;
+        recoverStoredCloudTask().catch((error) => setAccountStatus(error.message || String(error)));
+        return;
+      }
+
+      if (msg.type === "cloud-task-cleaned") {
+        storedCloudTask = { taskId: msg.taskId, status: "failed_pending" };
+        reportCloudTask(msg.taskId, "failed").catch((error) => setAccountStatus(error.message || String(error)));
         return;
       }
 
@@ -752,14 +964,25 @@
 
       if (msg.type === "import-complete") {
         setProgress("static", 100, "");
+        if (msg.cloudTaskId) {
+          reportCloudTask(msg.cloudTaskId, "imported")
+            .then(() => setAccountStatus("Cloud task completed."))
+            .catch((error) => setAccountStatus(`Import complete; settlement will retry: ${error.message || error}`));
+        }
         setTimeout(() => showStart("Import complete. Your Figma result is selected."), 450);
       }
 
       if (msg.type === "import-cancelled") {
+        if (msg.cloudTaskId) {
+          reportCloudTask(msg.cloudTaskId, "cancelled").catch((error) =>
+            setAccountStatus(`Cancelled; task cleanup will retry: ${error.message || error}`)
+          );
+        }
         showStart("Cancelled. Partial layers were removed from Figma.");
       }
 
       if (msg.type === "import-failed") {
+        if (msg.cloudTaskId) activeCloudTask = { taskId: msg.cloudTaskId };
         cancelBtn.classList.add("hidden");
         retryBtn.classList.remove("hidden");
         title.textContent = "Import failed";
@@ -770,6 +993,7 @@
 
     setAccountStatus("Checking connection...");
     postToMain({ type: "get-device-auth" });
+    postToMain({ type: "get-cloud-task" });
   </script>
 </body>
 </html>

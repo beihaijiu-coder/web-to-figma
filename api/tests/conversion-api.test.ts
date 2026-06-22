@@ -20,6 +20,8 @@ const authenticator: Authenticator = {
   },
 };
 
+const packageEncryptionKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
 async function connectInstallation(
   api: Awaited<ReturnType<typeof createApi>>,
   clientType: "chrome_extension" | "figma_plugin"
@@ -78,7 +80,7 @@ test("Chrome and Figma tokens complete a local encrypted task handoff and settle
       authorization: `Bearer ${chrome.tokens.accessToken}`,
       "idempotency-key": "conversion-job-1",
     },
-    payload: { targetInstallationId: figma.installationId, scenePackageVersion: 1 },
+    payload: { targetInstallationId: figma.installationId, scenePackageVersion: 1, packageEncryptionKey },
   });
   assert.equal(createJob.statusCode, 201);
   const taskId = createJob.json().taskId as string;
@@ -90,7 +92,7 @@ test("Chrome and Figma tokens complete a local encrypted task handoff and settle
       authorization: `Bearer ${chrome.tokens.accessToken}`,
       "idempotency-key": "conversion-job-1",
     },
-    payload: { targetInstallationId: figma.installationId, scenePackageVersion: 1 },
+    payload: { targetInstallationId: figma.installationId, scenePackageVersion: 1, packageEncryptionKey },
   });
   assert.equal(duplicateCreate.statusCode, 201);
   assert.equal(duplicateCreate.json().taskId, taskId);
@@ -115,6 +117,7 @@ test("Chrome and Figma tokens complete a local encrypted task handoff and settle
   });
   assert.equal(pending.statusCode, 200);
   assert.equal(pending.json().jobs[0].id, taskId);
+  assert.equal(pending.json().jobs[0].packageEncryptionKey, undefined);
 
   const claim = await api.inject({
     method: "POST",
@@ -122,6 +125,14 @@ test("Chrome and Figma tokens complete a local encrypted task handoff and settle
     headers: { authorization: `Bearer ${figma.tokens.accessToken}` },
   });
   assert.equal(claim.statusCode, 200);
+  assert.deepEqual(claim.json().encryption, { algorithm: "A256GCM", key: packageEncryptionKey });
+  const duplicateClaim = await api.inject({
+    method: "POST",
+    url: `/v1/conversion-jobs/${taskId}/claim`,
+    headers: { authorization: `Bearer ${figma.tokens.accessToken}` },
+  });
+  assert.equal(duplicateClaim.statusCode, 200);
+  assert.equal(duplicateClaim.json().taskId, taskId);
 
   const download = await api.inject({
     method: "GET",
@@ -138,6 +149,91 @@ test("Chrome and Figma tokens complete a local encrypted task handoff and settle
   });
   assert.equal(imported.statusCode, 200);
   assert.equal(imported.json().status, "imported");
+  assert.ok(
+    (
+      await pool.query<{ package_deleted_at: Date | string | null }>(
+        "select package_deleted_at from conversion_jobs where id = $1",
+        [taskId]
+      )
+    ).rows[0]?.package_deleted_at
+  );
+
+  const secondJobResponse = await api.inject({
+    method: "POST",
+    url: "/v1/conversion-jobs",
+    headers: {
+      authorization: `Bearer ${chrome.tokens.accessToken}`,
+      "idempotency-key": "conversion-job-2",
+    },
+    payload: { targetInstallationId: figma.installationId, scenePackageVersion: 1, packageEncryptionKey },
+  });
+  assert.equal(secondJobResponse.statusCode, 201);
+  const secondTaskId = secondJobResponse.json().taskId as string;
+  assert.equal(
+    (
+      await api.inject({
+        method: "PUT",
+        url: `/v1/conversion-jobs/${secondTaskId}/package`,
+        headers: {
+          authorization: `Bearer ${chrome.tokens.accessToken}`,
+          "content-type": "application/octet-stream",
+        },
+        payload: encryptedPackage,
+      })
+    ).statusCode,
+    200
+  );
+
+  const prematureImport = await api.inject({
+    method: "POST",
+    url: `/v1/conversion-jobs/${secondTaskId}/imported`,
+    headers: { authorization: `Bearer ${figma.tokens.accessToken}` },
+  });
+  assert.equal(prematureImport.statusCode, 409);
+
+  assert.equal(
+    (
+      await api.inject({
+        method: "POST",
+        url: `/v1/conversion-jobs/${secondTaskId}/claim`,
+        headers: { authorization: `Bearer ${figma.tokens.accessToken}` },
+      })
+    ).statusCode,
+    200
+  );
+  const cancelled = await api.inject({
+    method: "POST",
+    url: `/v1/conversion-jobs/${secondTaskId}/cancelled`,
+    headers: { authorization: `Bearer ${figma.tokens.accessToken}` },
+  });
+  assert.equal(cancelled.statusCode, 200);
+  assert.equal(cancelled.json().status, "cancelled");
+  assert.ok(
+    (
+      await pool.query<{ package_deleted_at: Date | string | null }>(
+        "select package_deleted_at from conversion_jobs where id = $1",
+        [secondTaskId]
+      )
+    ).rows[0]?.package_deleted_at
+  );
+
+  const thirdJobResponse = await api.inject({
+    method: "POST",
+    url: "/v1/conversion-jobs",
+    headers: {
+      authorization: `Bearer ${chrome.tokens.accessToken}`,
+      "idempotency-key": "conversion-job-3",
+    },
+    payload: { targetInstallationId: figma.installationId, scenePackageVersion: 1, packageEncryptionKey },
+  });
+  assert.equal(thirdJobResponse.statusCode, 201);
+  const captureFailed = await api.inject({
+    method: "POST",
+    url: `/v1/conversion-jobs/${thirdJobResponse.json().taskId}/capture-failed`,
+    headers: { authorization: `Bearer ${chrome.tokens.accessToken}` },
+  });
+  assert.equal(captureFailed.statusCode, 200);
+  assert.equal(captureFailed.json().status, "capture_failed");
 
   const me = await api.inject({
     method: "GET",

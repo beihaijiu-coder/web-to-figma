@@ -2266,6 +2266,9 @@
     importOptions.scene = scene;
 
     const rootFrame = trackCreatedNode(importOptions, figma.createFrame());
+    if (options.taskId && rootFrame.setPluginData) {
+      rootFrame.setPluginData("webToFigmaTaskId", String(options.taskId));
+    }
     let overflow = null;
     try {
       rootFrame.name = rootName(scene, sourceRoot);
@@ -2306,8 +2309,7 @@
       progress(options, "completed");
     } catch (error) {
       noteFailure(importOptions, sourceRoot, error);
-      rootFrame.name = `${rootFrame.name || rootName(scene, sourceRoot)} · import failed`;
-      focusResult(figma, rootFrame);
+      cleanupCancelled(figma, rootFrame, importOptions);
       throw error;
     }
 
@@ -2327,6 +2329,7 @@
 
   let cancelled = false;
   const AUTH_STORAGE_KEY = "webToFigmaDeviceAuthV1";
+  const CLOUD_TASK_STORAGE_KEY = "webToFigmaCloudTaskV1";
 
   function post(type, payload = {}) {
     const message = { type: type };
@@ -2334,6 +2337,12 @@
       if (Object.prototype.hasOwnProperty.call(payload, key)) message[key] = payload[key];
     }
     figmaApi.ui.postMessage(message);
+  }
+
+  async function saveCloudTask(task) {
+    if (figmaApi.clientStorage && figmaApi.clientStorage.setAsync) {
+      await figmaApi.clientStorage.setAsync(CLOUD_TASK_STORAGE_KEY, task || null);
+    }
   }
 
   figmaApi.showUI(__html__, {
@@ -2391,6 +2400,42 @@
       return;
     }
 
+    if (message.type === "get-cloud-task") {
+      var storedTask = null;
+      if (figmaApi.clientStorage && figmaApi.clientStorage.getAsync) {
+        storedTask = await figmaApi.clientStorage.getAsync(CLOUD_TASK_STORAGE_KEY);
+      }
+      post("cloud-task", { task: storedTask || null });
+      return;
+    }
+
+    if (message.type === "save-cloud-task") {
+      await saveCloudTask(message.task || null);
+      post("cloud-task-saved");
+      return;
+    }
+
+    if (message.type === "clear-cloud-task") {
+      await saveCloudTask(null);
+      post("cloud-task-cleared");
+      return;
+    }
+
+    if (message.type === "cleanup-stale-cloud-task") {
+      var taskId = String(message.taskId || "");
+      if (taskId && figmaApi.currentPage && figmaApi.currentPage.findAll) {
+        var staleNodes = figmaApi.currentPage.findAll(function (node) {
+          return node && node.getPluginData && node.getPluginData("webToFigmaTaskId") === taskId;
+        });
+        for (var staleIndex = 0; staleIndex < staleNodes.length; staleIndex++) {
+          if (staleNodes[staleIndex] && staleNodes[staleIndex].remove) staleNodes[staleIndex].remove();
+        }
+      }
+      await saveCloudTask({ taskId: taskId, status: "failed_pending" });
+      post("cloud-task-cleaned", { taskId: taskId });
+      return;
+    }
+
     if (message.type === "cancel-import") {
       cancelled = true;
       return;
@@ -2399,12 +2444,15 @@
     if (message.type !== "import-capture") return;
 
     cancelled = false;
+    var cloudTaskId = message.cloudTaskId ? String(message.cloudTaskId) : "";
+    if (cloudTaskId) await saveCloudTask({ taskId: cloudTaskId, status: "importing" });
     try {
       const result = await runtimeRoot.WebToFigmaImporter.importSceneToFigma(message.payload, {
         figma: figmaApi,
         layoutMode: message.layoutMode || "visual",
         overflowMode: message.overflowMode || "sidecar",
         fallbackFont: message.fallbackFont || { family: "Inter", style: "Regular" },
+        taskId: cloudTaskId,
         shouldCancel: () => cancelled,
         onProgress: (event) => {
           post("import-progress", event);
@@ -2412,13 +2460,17 @@
       });
 
       if (result.cancelled) {
-        post("import-cancelled");
+        if (cloudTaskId) await saveCloudTask({ taskId: cloudTaskId, status: "cancelled_pending" });
+        post("import-cancelled", { cloudTaskId: cloudTaskId });
         return;
       }
 
-      post("import-complete");
+      if (cloudTaskId) await saveCloudTask({ taskId: cloudTaskId, status: "imported_pending" });
+      post("import-complete", { cloudTaskId: cloudTaskId });
     } catch (error) {
+      if (cloudTaskId) await saveCloudTask({ taskId: cloudTaskId, status: "failed_pending" });
       post("import-failed", {
+        cloudTaskId: cloudTaskId,
         message: error && error.stack ? error.stack : (error && error.message) || String(error),
       });
     }

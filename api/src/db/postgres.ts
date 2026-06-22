@@ -3,6 +3,7 @@ import pg from "pg";
 import type { AuthenticatedIdentity } from "../auth/authenticator.js";
 import {
   calculateQuota,
+  effectivePlan,
   startOfUtcProductWeek,
   type BillingPeriod,
   type CurrentUser,
@@ -134,7 +135,12 @@ export class PostgresCurrentUserRepository implements CurrentUserRepository {
           currentPeriodEnd: entitlement.current_period_end?.toISOString() ?? null,
         },
         quota: calculateQuota({
-          plan: entitlement.plan,
+          plan: effectivePlan({
+            plan: entitlement.plan,
+            subscriptionStatus: entitlement.subscription_status,
+            currentPeriodEnd: entitlement.current_period_end,
+            now,
+          }),
           used: Number(quotaCounts.used),
           reserved: Number(quotaCounts.reserved),
           weekStartsAt,

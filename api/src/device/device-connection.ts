@@ -87,6 +87,8 @@ export interface DeviceConnectionRepository {
     principal: DevicePrincipal;
     clientType?: ClientType | undefined;
   }): Promise<InstallationSummary[]>;
+  listUserInstallations(input: { userId: string }): Promise<InstallationSummary[]>;
+  revokeInstallation(input: { userId: string; installationId: string; now: Date }): Promise<boolean>;
 }
 
 export class DeviceConnectionError extends Error {
@@ -143,9 +145,9 @@ export class DeviceConnectionService {
       pollIntervalSeconds: this.#config.device.pollIntervalSeconds,
       expiresAt,
     });
-    const verificationUri = new URL("/connect/device", this.#config.publicWebUrl).toString();
+    const verificationUri = new URL("/connect/device/", this.#config.publicWebUrl).toString();
     const verificationUriComplete = new URL(
-      `/connect/device?user_code=${encodeURIComponent(userCode)}`,
+      `/connect/device/?user_code=${encodeURIComponent(userCode)}`,
       this.#config.publicWebUrl
     ).toString();
 
@@ -207,5 +209,20 @@ export class DeviceConnectionService {
     clientType?: ClientType | undefined;
   }): Promise<InstallationSummary[]> {
     return this.#repository.listInstallations(input);
+  }
+
+  listUserInstallations(userId: string): Promise<InstallationSummary[]> {
+    return this.#repository.listUserInstallations({ userId });
+  }
+
+  revokeInstallation(input: { userId: string; installationId: string }): Promise<boolean> {
+    return this.#repository.revokeInstallation({ ...input, now: new Date() });
+  }
+
+  revokeOwnInstallation(principal: DevicePrincipal): Promise<boolean> {
+    return this.revokeInstallation({
+      userId: principal.userId,
+      installationId: principal.installationId,
+    });
   }
 }

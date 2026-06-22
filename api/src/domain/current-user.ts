@@ -34,6 +34,23 @@ export interface CurrentUserRepository {
   resolveCurrentUser(identity: AuthenticatedIdentity, now?: Date): Promise<CurrentUser>;
 }
 
+export function effectivePlan(input: {
+  plan: Plan;
+  subscriptionStatus: SubscriptionStatus;
+  currentPeriodEnd: Date | null;
+  now: Date;
+}): Plan {
+  if (
+    input.plan === "pro" &&
+    input.subscriptionStatus === "active" &&
+    input.currentPeriodEnd !== null &&
+    input.currentPeriodEnd > input.now
+  ) {
+    return "pro";
+  }
+  return "free";
+}
+
 export function startOfUtcProductWeek(now: Date): Date {
   const midnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const daysSinceMonday = (midnight.getUTCDay() + 6) % 7;

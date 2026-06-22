@@ -11,12 +11,14 @@ function createFakeFigma({
   failImages = false,
   defaultFrameClipsContent = false,
   strictClipsContent = false,
+  failFocus = false,
 } = {}) {
   const nodes = [];
   const pageChildren = [];
   const focusedNodes = [];
   const viewport = {
     scrolledAndZoomedIntoView(selection) {
+      if (failFocus) throw new Error("Viewport unavailable");
       focusedNodes.push(selection);
     },
   };
@@ -2299,6 +2301,33 @@ test("cancelling an import reports progress and removes partial Figma nodes", as
   assert.ok(progress.includes("import-started"));
   assert.ok(progress.includes("creating-nodes"));
   assert.ok(progress.includes("cancelled"));
+});
+
+test("a full import failure removes all task nodes before reporting failure", async () => {
+  const figma = createFakeFigma({ failFocus: true });
+  const scene = {
+    version: 1,
+    source: { url: "https://example.com/failure", selector: "body" },
+    viewport: { width: 800, height: 600 },
+    root: {
+      kind: "frame",
+      name: "Failure page",
+      rect: { x: 0, y: 0, width: 800, height: 600 },
+      children: [
+        {
+          kind: "text",
+          text: "Partial content",
+          rect: { x: 40, y: 40, width: 180, height: 28 },
+          style: { fontFamily: "Inter", fontSize: 18 },
+        },
+      ],
+    },
+  };
+
+  await assert.rejects(() => importSceneToFigma(scene, { figma }), /Viewport unavailable/);
+  assert.deepEqual(figma.currentPage.children, []);
+  assert.deepEqual(figma.currentPage.selection, []);
+  assert.equal(figma.nodes.some((node) => node.type === "FRAME" && node.removed), true);
 });
 
 test("cancelling sidecar overflow import removes both task roots", async () => {

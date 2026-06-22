@@ -49,23 +49,27 @@ export async function buildMarketingSite({
   const template = await readFile(path.join(sourceDirectory, 'index.html'), 'utf8');
   const html = template.replaceAll('{{CANONICAL_URL}}', canonicalUrl);
   const connectTemplate = await readFile(path.join(sourceDirectory, 'connect-device.html'), 'utf8');
+  const accountTemplate = await readFile(path.join(sourceDirectory, 'account.html'), 'utf8');
+  const authConfig = renderConnectConfig({ apiBaseUrl, clerkPublishableKey, clerkFrontendApiUrl });
   const connectHtml = connectTemplate
     .replaceAll('{{CANONICAL_URL}}', `${canonicalUrl}connect/device/`)
-    .replaceAll('{{CONNECT_CONFIG_JSON}}', renderConnectConfig({
-      apiBaseUrl,
-      clerkPublishableKey,
-      clerkFrontendApiUrl,
-    }));
+    .replaceAll('{{CONNECT_CONFIG_JSON}}', authConfig);
+  const accountHtml = accountTemplate
+    .replaceAll('{{CANONICAL_URL}}', `${canonicalUrl}account/`)
+    .replaceAll('{{ACCOUNT_CONFIG_JSON}}', authConfig);
 
   await rm(outputDirectory, { force: true, recursive: true });
   await mkdir(path.join(outputDirectory, 'assets'), { recursive: true });
   await mkdir(path.join(outputDirectory, 'connect', 'device'), { recursive: true });
+  await mkdir(path.join(outputDirectory, 'account'), { recursive: true });
   await Promise.all([
     writeFile(path.join(outputDirectory, 'index.html'), html, 'utf8'),
     writeFile(path.join(outputDirectory, 'connect', 'device', 'index.html'), connectHtml, 'utf8'),
+    writeFile(path.join(outputDirectory, 'account', 'index.html'), accountHtml, 'utf8'),
     copyFile(path.join(sourceDirectory, 'styles.css'), path.join(outputDirectory, 'styles.css')),
     copyFile(path.join(sourceDirectory, 'app.js'), path.join(outputDirectory, 'app.js')),
     copyFile(path.join(sourceDirectory, 'connect-device.js'), path.join(outputDirectory, 'connect-device.js')),
+    copyFile(path.join(sourceDirectory, 'account.js'), path.join(outputDirectory, 'account.js')),
     copyFile(iconSource, path.join(outputDirectory, 'assets', 'web-to-figma-icon.png')),
     writeFile(path.join(outputDirectory, 'robots.txt'), robotsFor(canonicalUrl), 'utf8'),
     writeFile(path.join(outputDirectory, 'sitemap.xml'), sitemapFor(canonicalUrl), 'utf8'),
@@ -80,6 +84,11 @@ function readArgument(name) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  try {
+    process.loadEnvFile(path.join(directory, '..', 'api', '.env.local'));
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
   const result = await buildMarketingSite({ siteUrl: readArgument('--site-url') });
   console.log(`已生成营销站：${result.outputDirectory}`);
   console.log(`Canonical：${result.canonicalUrl}`);

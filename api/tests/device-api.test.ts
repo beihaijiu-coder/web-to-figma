@@ -106,6 +106,48 @@ test("device connection API creates, approves, exchanges, and refreshes installa
     [{ id: figmaInstallationId, clientType: "figma_plugin", displayName: "Figma desktop" }]
   );
 
+  const websiteInstallations = await api.inject({
+    method: "GET",
+    url: "/v1/me/installations",
+    headers: { authorization: "Bearer clerk-session" },
+  });
+  assert.equal(websiteInstallations.statusCode, 200);
+  assert.equal(websiteInstallations.json().installations.length, 2);
+
+  const websiteRevoke = await api.inject({
+    method: "DELETE",
+    url: `/v1/me/installations/${figmaInstallationId}`,
+    headers: { authorization: "Bearer clerk-session" },
+  });
+  assert.equal(websiteRevoke.statusCode, 200);
+  assert.equal(
+    (
+      await api.inject({
+        method: "GET",
+        url: "/v1/device/me",
+        headers: { authorization: `Bearer ${figmaTokenResponse.json().accessToken}` },
+      })
+    ).statusCode,
+    401
+  );
+
+  const ownRevoke = await api.inject({
+    method: "DELETE",
+    url: "/v1/device/me",
+    headers: { authorization: `Bearer ${tokens.accessToken}` },
+  });
+  assert.equal(ownRevoke.statusCode, 200);
+  assert.equal(
+    (
+      await api.inject({
+        method: "GET",
+        url: "/v1/device/me",
+        headers: { authorization: `Bearer ${tokens.accessToken}` },
+      })
+    ).statusCode,
+    401
+  );
+
   await api.close();
   await database.close();
 });

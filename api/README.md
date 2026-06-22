@@ -52,24 +52,32 @@ curl http://127.0.0.1:8787/health
 - `POST /v1/device-connections/token` — extension/plugin polling endpoint; returns an opaque Access Token and rotating Refresh Token once approved.
 - `POST /v1/tokens/refresh` — rotate a Refresh Token; reuse detection revokes the token family and active installation access.
 - `GET /v1/device/me` — extension/plugin token reads its own installation identity.
+- `DELETE /v1/device/me` — revoke the calling extension/plugin installation and all of its tokens.
 - `GET /v1/installations?clientType=figma_plugin` — extension/plugin token lists active installations for the same internal user, used by Chrome to find a target Figma plugin.
+- `GET /v1/me/installations` and `DELETE /v1/me/installations/:installationId` — website session lists and revokes the user’s client installations.
 
 ### Conversion handoff
 
 - `POST /v1/conversion-jobs` — Chrome-extension token creates a task with an `Idempotency-Key` and reserves Free quota when needed.
 - `PUT /v1/conversion-jobs/:jobId/package` — Chrome-extension token uploads the encrypted scene package to the local development package store.
+- `POST /v1/conversion-jobs/:jobId/capture-failed` — Chrome-extension token releases a reservation when encryption or upload cannot complete.
 - `GET /v1/conversion-jobs/pending` — Figma-plugin token lists uploaded tasks assigned to that installation.
 - `POST /v1/conversion-jobs/:jobId/claim` — Figma-plugin token claims a task and receives the package download URL.
 - `GET /v1/conversion-jobs/:jobId/package` — Figma-plugin token downloads the encrypted package.
 - `POST /v1/conversion-jobs/:jobId/imported` — Figma-plugin token marks success; Free reservation is settled into one usage event and the local package is deleted.
 - `POST /v1/conversion-jobs/:jobId/failed` — Figma-plugin token marks failure; Free reservation is released and the local package is deleted.
+- `POST /v1/conversion-jobs/:jobId/cancelled` — Figma-plugin token records cancellation after partial Figma nodes have been removed.
 
-The current package storage is a local development adapter under `.data/packages`, ignored by Git. It preserves the API contract while avoiding an object-storage account before production. Production should replace this adapter with short-lived object-storage upload/download authorizations.
+Chrome removes credentials, browser-session fields, and URL query parameters from the cloud scene package, then encrypts the scene JSON with AES-256-GCM before upload. The temporary object contains only ciphertext; the API stores the task key separately and returns it only after the assigned Figma installation atomically claims that task. This is server-orchestrated encrypted storage, not a claim that the API itself can never decrypt the scene. Package SHA-256 is checked before decryption. Successful object deletion is recorded so the cleanup worker retries only packages whose deletion has not yet succeeded; deletion failure never reverses an already-settled task.
+
+The current package storage is a local development adapter under `.data/packages`, ignored by Git. A minute-based maintenance job expires abandoned tasks, releases reservations, and removes terminal package files. Production should replace this adapter with short-lived object-storage upload/download authorizations plus a storage lifecycle TTL.
 
 ## Production guardrails
 
 - Production configuration requires HTTPS origins and an explicit `CLERK_AUDIENCE`.
+- Local CORS explicitly permits the Figma UI `null` origin and a development Chrome-extension wildcard. Production rejects that wildcard and requires the published extension origin.
 - The API verifies `exp`, `iss`, token signature, `azp`/authorized party, and (when configured) `aud` through Clerk's backend verifier.
 - The product week starts Monday 00:00 UTC. Free users have two completed conversions per product week; uncompleted reservations reduce remaining capacity but are not usage.
 - Migrations are checksummed and run under a PostgreSQL advisory lock. A changed applied migration is rejected.
 - Device and plugin tokens are opaque, stored only as SHA-256 hashes, and are scoped to one installation. Refresh Token reuse revokes the family and all active access for that installation.
+- Only an active, unexpired Pro subscription receives unlimited quota. Past-due, cancelled, inactive, or expired Pro records use Free quota until billing synchronization restores an active period.

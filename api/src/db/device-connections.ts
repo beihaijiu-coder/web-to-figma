@@ -450,6 +450,99 @@ export class PostgresDeviceConnectionRepository implements DeviceConnectionRepos
     }));
   }
 
+  async listUserInstallations(input: { userId: string }): Promise<InstallationSummary[]> {
+    const result = await this.#pool.query<InstallationRow>(
+      `
+        SELECT id, client_type, display_name, status, created_at, last_seen_at
+        FROM installations
+        WHERE user_id = $1
+        ORDER BY last_seen_at DESC, created_at DESC
+      `,
+      [input.userId]
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      clientType: assertClientType(row.client_type),
+      displayName: row.display_name,
+      status: row.status,
+      createdAt: toIsoString(row.created_at),
+      lastSeenAt: toIsoString(row.last_seen_at),
+    }));
+  }
+
+  async revokeInstallation(input: { userId: string; installationId: string; now: Date }): Promise<boolean> {
+    const client = await this.#pool.connect();
+    try {
+      await client.query("BEGIN");
+      const revoked = await client.query<{ id: string }>(
+        `
+          UPDATE installations
+          SET status = 'revoked', revoked_at = $3
+          WHERE id = $1 AND user_id = $2 AND status = 'active'
+          RETURNING id
+        `,
+        [input.installationId, input.userId, input.now]
+      );
+      if (!revoked.rows[0]) {
+        await client.query("COMMIT");
+        return false;
+      }
+
+      await client.query(
+        "UPDATE access_tokens SET revoked_at = COALESCE(revoked_at, $2) WHERE installation_id = $1",
+        [input.installationId, input.now]
+      );
+      await client.query(
+        `
+          UPDATE refresh_token_families
+          SET revoked_at = COALESCE(revoked_at, $2), revoke_reason = COALESCE(revoke_reason, 'installation_revoked')
+          WHERE installation_id = $1
+        `,
+        [input.installationId, input.now]
+      );
+      await client.query(
+        `
+          UPDATE refresh_tokens
+          SET status = 'revoked', revoked_at = COALESCE(revoked_at, $2)
+          WHERE family_id IN (
+            SELECT id FROM refresh_token_families WHERE installation_id = $1
+          ) AND status = 'active'
+        `,
+        [input.installationId, input.now]
+      );
+
+      const terminalJobs = await client.query<{ id: string }>(
+        `
+          UPDATE conversion_jobs
+          SET status = 'cancelled', completed_at = $3, updated_at = $3
+          WHERE user_id = $2
+            AND (source_installation_id = $1 OR target_installation_id = $1)
+            AND status IN ('created', 'quota_reserved', 'upload_issued', 'uploaded', 'claimed', 'importing')
+          RETURNING id
+        `,
+        [input.installationId, input.userId, input.now]
+      );
+      if (terminalJobs.rows.length) {
+        await client.query(
+          `
+            UPDATE quota_reservations
+            SET status = 'released', released_at = $2
+            WHERE conversion_job_id = ANY($1::uuid[]) AND status = 'reserved'
+          `,
+          [terminalJobs.rows.map((row) => row.id), input.now]
+        );
+      }
+
+      await client.query("COMMIT");
+      return true;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async #issueTokenPair(
     client: pg.PoolClient,
     input: {

@@ -35,7 +35,7 @@ test("device connection approves once and exchanges a device code for installati
   });
   assert.match(created.deviceCode, /^w2f_dc_/);
   assert.match(created.userCode, /^[A-Z2-9]{5}-[A-Z2-9]{5}$/);
-  assert.equal(created.verificationUri, "http://localhost:4173/connect/device");
+  assert.equal(created.verificationUri, "http://localhost:4173/connect/device/");
   assert.match(created.verificationUriComplete, /user_code=/);
 
   const now = new Date();

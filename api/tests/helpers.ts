@@ -14,7 +14,7 @@ export function testConfig(): ApiConfig {
       secretKey: "sk_test_example",
       authorizedParties: ["http://localhost:4173"],
     },
-    corsAllowedOrigins: ["http://localhost:4173"],
+    corsAllowedOrigins: ["http://localhost:4173", "null", "chrome-extension://*"],
     publicWebUrl: "http://localhost:4173",
     device: {
       connectionTtlSeconds: 600,
@@ -25,6 +25,7 @@ export function testConfig(): ApiConfig {
     conversions: {
       jobTtlSeconds: 1_800,
       maxScenePackageBytes: 26_214_400,
+      maxActiveJobs: 3,
       packageStorageDir: ".data/test-packages",
     },
   };
