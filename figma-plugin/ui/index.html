@@ -363,7 +363,7 @@
       <input id="fallbackFont" class="field" placeholder="Fallback font, e.g. Inter" value="Inter" />
       <section class="account-panel" aria-label="Account connection">
         <p class="account-title">Account connection · dev</p>
-        <input id="apiBaseUrl" class="field" placeholder="API URL" value="http://127.0.0.1:8787" />
+        <input id="apiBaseUrl" class="field" placeholder="API URL" value="http://localhost:8787" />
         <div class="button-row">
           <button id="connectAccountBtn" class="secondary" type="button">Connect account</button>
           <button id="disconnectAccountBtn" class="neutral" type="button">Disconnect</button>
@@ -437,7 +437,7 @@
     }
 
     function normalizeApiBaseUrl(rawValue) {
-      const url = new URL(String(rawValue || "http://127.0.0.1:8787").trim());
+      const url = new URL(String(rawValue || "http://localhost:8787").trim());
       if (url.protocol !== "http:" && url.protocol !== "https:") {
         throw new Error("API URL must start with http:// or https://.");
       }

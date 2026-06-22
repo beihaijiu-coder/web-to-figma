@@ -143,6 +143,12 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
     version: "0.1.0",
   }));
 
+  api.get("/", async () => ({
+    status: "ok",
+    service: "web-to-figma-api",
+    health: "/health",
+  }));
+
   api.get("/v1/me", async (request, reply) => {
     let identity;
     try {

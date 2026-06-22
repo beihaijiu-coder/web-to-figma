@@ -57,11 +57,13 @@ test("Figma plugin UI stays focused on import progress without commercial/report
     false
   );
   assert.deepEqual(manifest.networkAccess.devAllowedDomains, [
-    "http://127.0.0.1:8787",
     "http://localhost:8787",
-    "http://127.0.0.1:4173",
     "http://localhost:4173",
   ]);
+  assert.equal(
+    manifest.networkAccess.devAllowedDomains.some((domain) => /127\.0\.0\.1/.test(domain)),
+    false
+  );
   assert.equal(ui.includes("Import clipboard capture"), true);
   assert.equal(ui.includes("Connect account"), true);
   assert.equal(ui.includes("clientType: \"figma_plugin\""), true);

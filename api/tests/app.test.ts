@@ -61,6 +61,19 @@ test("health check does not need authentication", async () => {
   await api.close();
 });
 
+test("root route explains that the local API is running", async () => {
+  const api = await testApi();
+  const response = await api.inject({ method: "GET", url: "/" });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json(), {
+    status: "ok",
+    service: "web-to-figma-api",
+    health: "/health",
+  });
+  await api.close();
+});
+
 test("GET /v1/me rejects absent or invalid credentials without leaking details", async () => {
   const api = await testApi();
 
