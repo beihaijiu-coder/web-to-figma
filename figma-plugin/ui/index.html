@@ -1093,7 +1093,6 @@
         activeCloudTask = { taskId: claimedTaskId };
         storedCloudTask = { taskId: claimedTaskId, status: "claimed" };
         postToMain({ type: "save-cloud-task", task: storedCloudTask });
-        pendingCloudJobs = pendingCloudJobs.filter((candidate) => candidate.id !== job.id);
         handedToImporter = true;
         importPayload(payload, claimedTaskId);
       } catch (error) {

@@ -103,6 +103,11 @@ export interface ConversionJobRepository {
     now: Date;
   }): Promise<ConversionJobSummary>;
   markPackageRemoved(input: { objectKey: string; now: Date }): Promise<void>;
+  storedPackageObjectKeysBeyondLimit(input: {
+    principal: DevicePrincipal;
+    maxStoredCaptures: number;
+    now: Date;
+  }): Promise<string[]>;
   expireStale(now: Date): Promise<string[]>;
 }
 

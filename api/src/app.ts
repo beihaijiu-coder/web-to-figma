@@ -398,6 +398,14 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
         api.log.warn({ err: error }, "conversion package cleanup deferred");
       }
     }
+    async function pruneStoredCaptures(principal: DevicePrincipal): Promise<void> {
+      const objectKeys = await conversionJobs.storedPackageObjectKeysBeyondLimit({
+        principal,
+        maxStoredCaptures: dependencies.config.conversions.maxStoredCaptures,
+        now: new Date(),
+      });
+      await Promise.all(objectKeys.map((objectKey) => removeStoredPackage(objectKey)));
+    }
     const deviceAuth = dependencies.deviceConnections;
 
     api.addContentTypeParser("application/octet-stream", { parseAs: "buffer" }, (_request, body, done) => {
@@ -485,6 +493,7 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
             packageSha256,
             now: new Date(),
           });
+          await pruneStoredCaptures(principal);
           return reply.code(200).send({ taskId: job.id, status: job.status, packageSha256: job.packageSha256 });
         } catch (error) {
           await conversionJobs.markSourceFailed({ principal, jobId: uploadJob.id, now: new Date() }).catch(() => undefined);
@@ -611,7 +620,6 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
       if (!params.success) return reply.code(400).send(errorBody("INVALID_REQUEST", "Invalid task id"));
       try {
         const job = await conversionJobs.markImported({ principal, jobId: params.data.jobId, now: new Date() });
-        await removeStoredPackage(job.objectKey);
         return reply.code(200).send({ taskId: job.id, status: job.status });
       } catch (error) {
         const mapped = mapConversionError(error);
@@ -632,7 +640,7 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
           terminalStatus: "import_failed",
           now: new Date(),
         });
-        await removeStoredPackage(job.objectKey);
+        if (job.status === "import_failed") await removeStoredPackage(job.objectKey);
         return reply.code(200).send({ taskId: job.id, status: job.status });
       } catch (error) {
         const mapped = mapConversionError(error);
@@ -653,7 +661,7 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
           terminalStatus: "cancelled",
           now: new Date(),
         });
-        await removeStoredPackage(job.objectKey);
+        if (job.status === "cancelled") await removeStoredPackage(job.objectKey);
         return reply.code(200).send({ taskId: job.id, status: job.status });
       } catch (error) {
         const mapped = mapConversionError(error);

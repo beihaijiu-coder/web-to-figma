@@ -32,6 +32,7 @@ export function testConfig(): ApiConfig {
       jobTtlSeconds: 1_800,
       maxScenePackageBytes: 26_214_400,
       maxActiveJobs: 3,
+      maxStoredCaptures: 10,
       packageStorageDir: ".data/test-packages",
     },
   };

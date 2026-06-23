@@ -224,14 +224,40 @@ test("Chrome uploads an account queue task that a later Figma connection can cla
   });
   assert.equal(imported.statusCode, 200);
   assert.equal(imported.json().status, "imported");
-  assert.ok(
+  assert.equal(
     (
       await pool.query<{ package_deleted_at: Date | string | null }>(
         "select package_deleted_at from conversion_jobs where id = $1",
         [taskId]
       )
-    ).rows[0]?.package_deleted_at
+    ).rows[0]?.package_deleted_at,
+    null
   );
+
+  const pendingAfterImport = await api.inject({
+    method: "GET",
+    url: "/v1/conversion-jobs/pending",
+    headers: { authorization: `Bearer ${figma.tokens.accessToken}` },
+  });
+  assert.equal(pendingAfterImport.statusCode, 200);
+  assert.equal(pendingAfterImport.json().jobs[0].id, taskId);
+  assert.equal(pendingAfterImport.json().jobs[0].status, "imported");
+
+  const repeatClaim = await api.inject({
+    method: "POST",
+    url: `/v1/conversion-jobs/${taskId}/claim`,
+    headers: { authorization: `Bearer ${figma.tokens.accessToken}` },
+  });
+  assert.equal(repeatClaim.statusCode, 200);
+  assert.equal(repeatClaim.json().status, "imported");
+
+  const repeatDownloadJson = await api.inject({
+    method: "GET",
+    url: `/v1/conversion-jobs/${taskId}/package-json`,
+    headers: { authorization: `Bearer ${figma.tokens.accessToken}` },
+  });
+  assert.equal(repeatDownloadJson.statusCode, 200);
+  assert.deepEqual(repeatDownloadJson.json().payload, packagePayload);
 
   const secondJobResponse = await api.inject({
     method: "POST",
@@ -318,6 +344,107 @@ test("Chrome uploads an account queue task that a later Figma connection can cla
   assert.equal(me.statusCode, 200);
   assert.equal(me.json().quota.used, 1);
   assert.equal(me.json().quota.remaining, 1);
+
+  await api.close();
+  await database.close();
+});
+
+test("cloud capture storage keeps the newest ten uploaded webpages", async () => {
+  const database = await migratedPglite();
+  const pool = pglitePool(database);
+  const config = {
+    ...testConfig(),
+    conversions: {
+      ...testConfig().conversions,
+      maxActiveJobs: 20,
+      maxStoredCaptures: 10,
+      packageStorageDir: await mkdtemp(join(tmpdir(), "web-to-figma-packages-")),
+    },
+  };
+  const api = await createApi({
+    config,
+    authenticator,
+    currentUsers: new PostgresCurrentUserRepository(pool),
+    deviceConnections: new DeviceConnectionService(new PostgresDeviceConnectionRepository(pool), config),
+    conversionJobs: new PostgresConversionJobRepository(pool),
+    packageStorage: new LocalPackageStorage(config.conversions.packageStorageDir),
+  });
+
+  const chrome = await connectInstallation(api, "chrome_extension");
+  await pool.query(
+    `
+      UPDATE entitlements
+      SET plan = 'pro',
+          subscription_status = 'active',
+          current_period_end = $2
+      WHERE user_id = (
+        SELECT user_id FROM installations WHERE id = $1
+      )
+    `,
+    [chrome.installationId, new Date(Date.now() + 86_400_000)]
+  );
+
+  const taskIds: string[] = [];
+  for (let index = 0; index < 11; index += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    const createJob = await api.inject({
+      method: "POST",
+      url: "/v1/conversion-jobs",
+      headers: {
+        authorization: `Bearer ${chrome.tokens.accessToken}`,
+        "idempotency-key": `stored-capture-${index}`,
+      },
+      payload: {
+        scenePackageVersion: 1,
+        packageEncryptionKey,
+        preview: {
+          sourceUrl: `https://example.com/page-${index}`,
+          sourceTitle: `Stored page ${index}`,
+          previewImageDataUrl: "data:image/jpeg;base64,AAAA",
+        },
+      },
+    });
+    assert.equal(createJob.statusCode, 201);
+    const taskId = createJob.json().taskId as string;
+    taskIds.push(taskId);
+    const upload = await api.inject({
+      method: "PUT",
+      url: `/v1/conversion-jobs/${taskId}/package`,
+      headers: {
+        authorization: `Bearer ${chrome.tokens.accessToken}`,
+        "content-type": "application/octet-stream",
+      },
+      payload: createEncryptedScenePackage({ ...packagePayload, source: { url: `https://example.com/page-${index}` } }),
+    });
+    assert.equal(upload.statusCode, 200);
+  }
+
+  const oldest = await pool.query<{ status: string; package_deleted_at: Date | string | null }>(
+    "select status, package_deleted_at from conversion_jobs where id = $1",
+    [taskIds[0]]
+  );
+  assert.equal(oldest.rows[0]?.status, "expired");
+  assert.ok(oldest.rows[0]?.package_deleted_at);
+
+  const figma = await connectInstallation(api, "figma_plugin");
+  const pending = await api.inject({
+    method: "GET",
+    url: "/v1/conversion-jobs/pending",
+    headers: { authorization: `Bearer ${figma.tokens.accessToken}` },
+  });
+  assert.equal(pending.statusCode, 200);
+  assert.equal(pending.json().jobs.length, 10);
+  assert.equal(
+    pending.json().jobs.some((job: { id: string }) => job.id === taskIds[0]),
+    false
+  );
+
+  const claimPruned = await api.inject({
+    method: "POST",
+    url: `/v1/conversion-jobs/${taskIds[0]}/claim`,
+    headers: { authorization: `Bearer ${figma.tokens.accessToken}` },
+  });
+  assert.equal(claimPruned.statusCode, 409);
 
   await api.close();
   await database.close();

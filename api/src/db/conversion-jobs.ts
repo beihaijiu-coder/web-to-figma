@@ -185,6 +185,7 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
           FROM conversion_jobs
           WHERE user_id = $1
             AND status IN ('created', 'quota_reserved', 'upload_issued', 'uploaded', 'claimed', 'importing')
+            AND package_deleted_at IS NULL
         `,
         [input.principal.userId]
       );
@@ -354,13 +355,15 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
                package_encryption_key, package_encryption_algorithm, created_at
         FROM conversion_jobs
         WHERE user_id = $1
+          AND package_deleted_at IS NULL
           AND (
             (target_installation_id IS NULL AND status = 'uploaded')
             OR (target_installation_id = $2 AND status IN ('uploaded', 'claimed', 'importing'))
+            OR status = 'imported'
           )
-          AND expires_at > $3
-        ORDER BY created_at ASC
-        LIMIT 20
+          AND (expires_at > $3 OR status = 'imported')
+        ORDER BY created_at DESC, id DESC
+        LIMIT 10
       `,
       [input.principal.userId, input.principal.installationId, input.now]
     );
@@ -378,7 +381,9 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
         WHERE id = $1
           AND user_id = $2
           AND (target_installation_id IS NULL OR target_installation_id = $3)
+          AND package_deleted_at IS NULL
           AND status = 'uploaded'
+          AND expires_at > $4
         RETURNING id, status, object_key, expires_at, target_installation_id,
                   source_url, source_title, preview_image_data_url,
                   scene_package_version, package_size_bytes::text, package_sha256,
@@ -397,9 +402,11 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
         FROM conversion_jobs
         WHERE id = $1
           AND user_id = $2
-          AND target_installation_id = $3
-          AND status IN ('claimed', 'importing')
-          AND expires_at > $4
+          AND package_deleted_at IS NULL
+          AND (
+            (target_installation_id = $3 AND status IN ('claimed', 'importing') AND expires_at > $4)
+            OR status = 'imported'
+          )
       `,
       [input.jobId, input.principal.userId, input.principal.installationId, input.now]
     );
@@ -416,6 +423,7 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
           AND user_id = $2
           AND target_installation_id = $3
           AND status IN ('claimed', 'importing')
+          AND package_deleted_at IS NULL
           AND expires_at > $4
         RETURNING id, status, object_key, expires_at, target_installation_id,
                   source_url, source_title, preview_image_data_url,
@@ -424,8 +432,24 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
       `,
       [input.jobId, input.principal.userId, input.principal.installationId, input.now]
     );
-    if (!result.rows[0]) throw new ConversionJobError("JOB_NOT_READY");
-    return jobSummary(result.rows[0]);
+    if (result.rows[0]) return jobSummary(result.rows[0]);
+
+    const imported = await this.#pool.query<JobRow>(
+      `
+        SELECT id, status, object_key, expires_at, target_installation_id,
+               source_url, source_title, preview_image_data_url,
+               scene_package_version, package_size_bytes::text, package_sha256,
+               package_encryption_key, package_encryption_algorithm, created_at
+        FROM conversion_jobs
+        WHERE id = $1
+          AND user_id = $2
+          AND status = 'imported'
+          AND package_deleted_at IS NULL
+      `,
+      [input.jobId, input.principal.userId]
+    );
+    if (!imported.rows[0]) throw new ConversionJobError("JOB_NOT_READY");
+    return jobSummary(imported.rows[0]);
   }
 
   async markImported(input: { principal: DevicePrincipal; jobId: string; now: Date }): Promise<ConversionJobSummary> {
@@ -460,6 +484,71 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
     );
   }
 
+  async storedPackageObjectKeysBeyondLimit(input: {
+    principal: DevicePrincipal;
+    maxStoredCaptures: number;
+    now: Date;
+  }): Promise<string[]> {
+    const client = await this.#pool.connect();
+    try {
+      await client.query("BEGIN");
+      const pruned = await client.query<{ id: string; object_key: string; status: ConversionJobStatus }>(
+        `
+          SELECT id, object_key, status
+          FROM (
+            SELECT id, object_key, status,
+                   row_number() OVER (ORDER BY created_at DESC, id DESC) AS stored_rank
+            FROM conversion_jobs
+            WHERE user_id = $1
+              AND object_key IS NOT NULL
+              AND package_deleted_at IS NULL
+              AND package_size_bytes IS NOT NULL
+              AND status IN ('uploaded', 'claimed', 'importing', 'imported')
+          ) stored
+          WHERE stored_rank > $2
+          ORDER BY stored_rank ASC
+        `,
+        [input.principal.userId, input.maxStoredCaptures]
+      );
+      if (!pruned.rows.length) {
+        await client.query("COMMIT");
+        return [];
+      }
+
+      const prunedIds = pruned.rows.map((row) => row.id);
+      await client.query(
+        `
+          UPDATE conversion_jobs
+          SET status = CASE WHEN status = 'imported' THEN status ELSE 'expired' END,
+              completed_at = CASE
+                WHEN status = 'imported' THEN completed_at
+                ELSE COALESCE(completed_at, $3)
+              END,
+              updated_at = $3
+          WHERE user_id = $1
+            AND id = ANY($2::uuid[])
+        `,
+        [input.principal.userId, prunedIds, input.now]
+      );
+      await client.query(
+        `
+          UPDATE quota_reservations
+          SET status = 'released', released_at = $2
+          WHERE status = 'reserved'
+            AND conversion_job_id = ANY($1::uuid[])
+        `,
+        [prunedIds, input.now]
+      );
+      await client.query("COMMIT");
+      return pruned.rows.map((row) => row.object_key);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async expireStale(now: Date): Promise<string[]> {
     const client = await this.#pool.connect();
     try {
@@ -490,7 +579,7 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
           FROM conversion_jobs
           WHERE object_key IS NOT NULL
             AND package_deleted_at IS NULL
-            AND status IN ('imported', 'cancelled', 'capture_failed', 'upload_expired', 'import_failed', 'expired')
+            AND status IN ('cancelled', 'capture_failed', 'upload_expired', 'import_failed', 'expired')
           ORDER BY object_key
           LIMIT 500
         `
@@ -533,6 +622,10 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
       );
       const existing = job.rows[0];
       if (!existing) throw new ConversionJobError("JOB_NOT_FOUND");
+      if (existing.status === "imported") {
+        await client.query("COMMIT");
+        return jobSummary(existing);
+      }
       if (role === "target" && existing.target_installation_id !== principal.installationId) {
         throw new ConversionJobError("JOB_NOT_READY");
       }

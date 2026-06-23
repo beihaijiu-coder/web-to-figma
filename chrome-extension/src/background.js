@@ -371,17 +371,17 @@ async function captureCloudTaskPreview(tab) {
   }
 }
 
-async function createCloudTaskPreview(payload, tab) {
-  const previewImageDataUrl = await captureCloudTaskPreview(tab);
+async function createCloudTaskPreview(payload, tab, previewImageDataUrl = null) {
   return {
     sourceUrl: sourceUrlFromPayload(payload, tab),
     sourceTitle: sourceTitleFromPayload(payload, tab),
-    previewImageDataUrl,
+    previewImageDataUrl: previewImageDataUrl || (await captureCloudTaskPreview(tab)),
   };
 }
 
-async function submitCaptureToCloud(payload, targetInstallationId = null, tab = null) {
+async function submitCaptureToCloud(payload, targetInstallationId = null, tab = null, previewImageDataUrl = null) {
   const baseUrl = await getCloudApiBaseUrl();
+  const preview = await createCloudTaskPreview(payload, tab, previewImageDataUrl);
   const accessToken = await getCloudAccessToken(baseUrl);
   if (!accessToken) {
     throw new WebToFigmaApiError("Connect the Chrome extension account before sending a cloud task", {
@@ -391,7 +391,6 @@ async function submitCaptureToCloud(payload, targetInstallationId = null, tab = 
   }
 
   const encrypted = await encryptSceneCapture(payload);
-  const preview = await createCloudTaskPreview(payload, tab);
   const idempotencyKey = `capture-${Date.now()}-${crypto.randomUUID()}`;
   const job = await createConversionJob({
     baseUrl,
@@ -1089,6 +1088,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       await loadProxySession();
       const proxyDiagStart = figmaProxyDiagnostics.length;
       const tab = await resolveCaptureTab(msg, sender);
+      const previewImageDataUrl = await captureCloudTaskPreview(tab);
 
       const { result, diagnostics } = await runCapture(tab.id, msg.options || {});
       const payload = await hydrateSceneAssets(normalizeCapturePayload(result), tab);
@@ -1111,7 +1111,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
       if (canUploadToCloud) {
         try {
-          handoff = await submitCaptureToCloud(payload, msg.targetInstallationId || null, tab);
+          handoff = await submitCaptureToCloud(payload, msg.targetInstallationId || null, tab, previewImageDataUrl);
         } catch (error) {
           handoffError = {
             message: error?.message || String(error),

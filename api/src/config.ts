@@ -27,6 +27,7 @@ const environmentSchema = z.object({
   CONVERSION_JOB_TTL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(1_800),
   MAX_SCENE_PACKAGE_BYTES: z.coerce.number().int().min(1_024).max(104_857_600).default(26_214_400),
   MAX_ACTIVE_CONVERSION_JOBS: z.coerce.number().int().min(1).max(20).default(3),
+  MAX_STORED_CAPTURE_JOBS: z.coerce.number().int().min(1).max(100).default(10),
   PACKAGE_STORAGE_DIR: z.string().min(1).default(".data/packages"),
 });
 
@@ -53,6 +54,7 @@ export type ApiConfig = {
     jobTtlSeconds: number;
     maxScenePackageBytes: number;
     maxActiveJobs: number;
+    maxStoredCaptures: number;
     packageStorageDir: string;
   };
 };
@@ -194,6 +196,7 @@ export function createConfig(environment: NodeJS.ProcessEnv = process.env): ApiC
       jobTtlSeconds: parsed.data.CONVERSION_JOB_TTL_SECONDS,
       maxScenePackageBytes: parsed.data.MAX_SCENE_PACKAGE_BYTES,
       maxActiveJobs: parsed.data.MAX_ACTIVE_CONVERSION_JOBS,
+      maxStoredCaptures: parsed.data.MAX_STORED_CAPTURE_JOBS,
       packageStorageDir: parsed.data.PACKAGE_STORAGE_DIR,
     },
   };
