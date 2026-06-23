@@ -62,8 +62,9 @@ curl http://127.0.0.1:8787/health
 - `PUT /v1/conversion-jobs/:jobId/package` — Chrome-extension token uploads the encrypted scene package to the local development package store.
 - `POST /v1/conversion-jobs/:jobId/capture-failed` — Chrome-extension token releases a reservation when encryption or upload cannot complete.
 - `GET /v1/conversion-jobs/pending` — Figma-plugin token lists uploaded tasks for the same account that are either unclaimed or already assigned to that installation, including card-preview metadata.
-- `POST /v1/conversion-jobs/:jobId/claim` — Figma-plugin token claims a task, atomically binds unclaimed account-queue tasks to that installation, and receives the package download URL.
-- `GET /v1/conversion-jobs/:jobId/package` — Figma-plugin token downloads the encrypted package.
+- `POST /v1/conversion-jobs/:jobId/claim` — Figma-plugin token claims a task, atomically binds unclaimed account-queue tasks to that installation, and receives both encrypted-binary and API-decoded package download URLs.
+- `GET /v1/conversion-jobs/:jobId/package` — Figma-plugin token downloads the encrypted package when the plugin UI can use WebCrypto locally.
+- `GET /v1/conversion-jobs/:jobId/package-json` — Figma-plugin token downloads the decrypted capture payload through the API compatibility path for Figma UI environments without WebCrypto.
 - `POST /v1/conversion-jobs/:jobId/imported` — Figma-plugin token marks success; Free reservation is settled into one usage event and the local package is deleted.
 - `POST /v1/conversion-jobs/:jobId/failed` — Figma-plugin token marks failure; Free reservation is released and the local package is deleted.
 - `POST /v1/conversion-jobs/:jobId/cancelled` — Figma-plugin token records cancellation after partial Figma nodes have been removed.

@@ -724,8 +724,19 @@
     }
 
     async function sha256Hex(value) {
+      if (!hasSubtleCrypto()) throw new Error("Web Crypto is unavailable.");
       const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", value));
       return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    }
+
+    function hasSubtleCrypto() {
+      return Boolean(
+        window.crypto &&
+          crypto.subtle &&
+          typeof crypto.subtle.digest === "function" &&
+          typeof crypto.subtle.importKey === "function" &&
+          typeof crypto.subtle.decrypt === "function"
+      );
     }
 
     async function decryptScenePackage(encryptedBody, keyValue) {
@@ -753,6 +764,25 @@
       } catch {
         throw new Error("Scene package authentication or decryption failed.");
       }
+    }
+
+    async function downloadCloudTaskPayload(claim, accessToken) {
+      if (hasSubtleCrypto()) {
+        setAccountStatus("Downloading and verifying the encrypted task...");
+        const downloaded = await apiBytes(claim.body.download.url, accessToken);
+        const expectedSha256 = claim.body.packageSha256 || downloaded.packageSha256;
+        if (expectedSha256 && (await sha256Hex(downloaded.body)) !== expectedSha256) {
+          throw new Error("Task package checksum does not match.");
+        }
+        return decryptScenePackage(downloaded.body, claim.body.encryption.key);
+      }
+
+      const downloadJson = claim.body.downloadJson?.url || claim.body.download?.url?.replace(/\/package$/, "/package-json");
+      if (!downloadJson) throw new Error("Task download endpoint is missing.");
+      setAccountStatus("Downloading task through the API compatibility path...");
+      const result = await apiJson(downloadJson, { accessToken });
+      if (result.body?.payload === undefined) throw new Error("Task package payload is invalid.");
+      return result.body.payload;
     }
 
     function tokenExpiry(seconds) {
@@ -1059,13 +1089,7 @@
           throw new Error("Task encryption metadata is missing.");
         }
 
-        setAccountStatus("Downloading and verifying the encrypted task...");
-        const downloaded = await apiBytes(claim.body.download.url, accessToken);
-        const expectedSha256 = claim.body.packageSha256 || downloaded.packageSha256;
-        if (expectedSha256 && (await sha256Hex(downloaded.body)) !== expectedSha256) {
-          throw new Error("Task package checksum does not match.");
-        }
-        const payload = await decryptScenePackage(downloaded.body, claim.body.encryption.key);
+        const payload = await downloadCloudTaskPayload(claim, accessToken);
         activeCloudTask = { taskId: claimedTaskId };
         storedCloudTask = { taskId: claimedTaskId, status: "claimed" };
         postToMain({ type: "save-cloud-task", task: storedCloudTask });

@@ -97,6 +97,8 @@ test("Figma plugin UI stays focused on import progress without commercial/report
   assert.equal(ui.includes("cloudTaskGrid"), true);
   assert.equal(ui.includes("cloud-task-card"), true);
   assert.equal(ui.includes("previewImageDataUrl"), true);
+  assert.equal(ui.includes("downloadJson"), true);
+  assert.equal(ui.includes("hasSubtleCrypto"), true);
   assert.equal(ui.includes("Cancel"), true);
   assert.equal(ui.includes("Partial layers were removed from Figma."), true);
   assert.equal(ui.includes("Partial layers were kept in Figma."), false);

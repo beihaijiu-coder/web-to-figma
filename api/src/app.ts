@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createDecipheriv, createHash } from "node:crypto";
 
 import cors from "@fastify/cors";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
@@ -100,6 +100,57 @@ function sha256Hex(body: Buffer): string {
   return createHash("sha256").update(body).digest("hex");
 }
 
+const SCENE_PACKAGE_MAGIC = Buffer.from([0x57, 0x32, 0x46, 0x31]);
+const SCENE_PACKAGE_IV_BYTES = 12;
+const SCENE_PACKAGE_AUTH_TAG_BYTES = 16;
+
+class ScenePackageDecodeError extends Error {
+  readonly code: "INVALID_SCENE_PACKAGE" | "SCENE_PACKAGE_DECRYPTION_FAILED";
+
+  constructor(code: ScenePackageDecodeError["code"], message: string) {
+    super(message);
+    this.name = "ScenePackageDecodeError";
+    this.code = code;
+  }
+}
+
+function decryptScenePackagePayload(body: Buffer, packageEncryptionKey: string): unknown {
+  const minimumLength = SCENE_PACKAGE_MAGIC.length + SCENE_PACKAGE_IV_BYTES + SCENE_PACKAGE_AUTH_TAG_BYTES + 1;
+  if (body.length < minimumLength || !body.subarray(0, SCENE_PACKAGE_MAGIC.length).equals(SCENE_PACKAGE_MAGIC)) {
+    throw new ScenePackageDecodeError("INVALID_SCENE_PACKAGE", "Scene package format is not supported");
+  }
+
+  const rawKey = Buffer.from(packageEncryptionKey, "base64url");
+  if (rawKey.length !== 32) {
+    throw new ScenePackageDecodeError("INVALID_SCENE_PACKAGE", "Scene package key is invalid");
+  }
+
+  const ivStart = SCENE_PACKAGE_MAGIC.length;
+  const ivEnd = ivStart + SCENE_PACKAGE_IV_BYTES;
+  const tagStart = body.length - SCENE_PACKAGE_AUTH_TAG_BYTES;
+  const iv = body.subarray(ivStart, ivEnd);
+  const ciphertext = body.subarray(ivEnd, tagStart);
+  const authTag = body.subarray(tagStart);
+
+  try {
+    const decipher = createDecipheriv("aes-256-gcm", rawKey, iv);
+    decipher.setAAD(SCENE_PACKAGE_MAGIC);
+    decipher.setAuthTag(authTag);
+    const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+    const parsed = JSON.parse(plaintext.toString("utf8"));
+    if (parsed?.source !== "web-to-figma" || parsed?.type !== "capture-scene" || parsed.payload === undefined) {
+      throw new Error("Unexpected scene package payload");
+    }
+    return parsed.payload;
+  } catch (error) {
+    if (error instanceof ScenePackageDecodeError) throw error;
+    throw new ScenePackageDecodeError(
+      "SCENE_PACKAGE_DECRYPTION_FAILED",
+      "Scene package authentication or decoding failed"
+    );
+  }
+}
+
 function isCorsOriginAllowed(origin: string, allowedOrigins: Set<string>): boolean {
   if (allowedOrigins.has(origin)) return true;
   return allowedOrigins.has("chrome-extension://*") && /^chrome-extension:\/\/[a-p]{32}$/.test(origin);
@@ -117,6 +168,9 @@ function mapConversionError(error: unknown) {
           ? 429
           : 409;
     return { status, body: errorBody(error.code, error.message) };
+  }
+  if (error instanceof ScenePackageDecodeError) {
+    return { status: 422, body: errorBody(error.code, error.message) };
   }
   return null;
 }
@@ -492,6 +546,7 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
           taskId: job.id,
           status: job.status,
           download: { method: "GET", url: `/v1/conversion-jobs/${job.id}/package` },
+          downloadJson: { method: "GET", url: `/v1/conversion-jobs/${job.id}/package-json` },
           encryption: {
             algorithm: job.packageEncryptionAlgorithm,
             key: job.packageEncryptionKey,
@@ -518,6 +573,30 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
           .header("content-type", "application/octet-stream")
           .header("x-scene-package-sha256", job.packageSha256 ?? "")
           .send(body);
+      } catch (error) {
+        const mapped = mapConversionError(error);
+        if (mapped) return reply.code(mapped.status).send(mapped.body);
+        throw error;
+      }
+    });
+
+    api.get("/v1/conversion-jobs/:jobId/package-json", async (request, reply) => {
+      const principal = await requireDevicePrincipal(deviceAuth, request.headers.authorization, "figma_plugin");
+      if (!principal) return reply.code(401).send(errorBody("UNAUTHORIZED", "Figma plugin token required"));
+      const params = paramsWithJobIdSchema.safeParse(request.params);
+      if (!params.success) return reply.code(400).send(errorBody("INVALID_REQUEST", "Invalid task id"));
+      try {
+        const job = await conversionJobs.getPackageForTarget({ principal, jobId: params.data.jobId, now: new Date() });
+        const body = await packageStorage.read(job.objectKey);
+        const expectedSha256 = job.packageSha256;
+        if (expectedSha256 && sha256Hex(body) !== expectedSha256) {
+          throw new ScenePackageDecodeError("INVALID_SCENE_PACKAGE", "Task package checksum does not match");
+        }
+        return reply.code(200).send({
+          taskId: job.id,
+          packageSha256: expectedSha256,
+          payload: decryptScenePackagePayload(body, job.packageEncryptionKey),
+        });
       } catch (error) {
         const mapped = mapConversionError(error);
         if (mapped) return reply.code(mapped.status).send(mapped.body);

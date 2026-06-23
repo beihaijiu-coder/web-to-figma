@@ -357,8 +357,13 @@ async function captureCloudTaskPreview(tab) {
   try {
     await setIgnoredCaptureUiHidden(tab.id, true);
     ignoredUiHidden = true;
-    const raw = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "jpeg", quality: 60 });
-    return (await downscalePreviewInPage(tab.id, raw)) || (await downscalePreviewDataUrl(raw));
+    for (const quality of [48, 34, 24, 16]) {
+      const raw = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "jpeg", quality });
+      if (raw.length <= CLOUD_TASK_PREVIEW_MAX_DATA_URL_LENGTH) return raw;
+      const preview = (await downscalePreviewInPage(tab.id, raw)) || (await downscalePreviewDataUrl(raw));
+      if (preview) return preview;
+    }
+    return null;
   } catch {
     return null;
   } finally {

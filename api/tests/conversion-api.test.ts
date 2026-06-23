@@ -1,4 +1,5 @@
 import { mkdtemp } from "node:fs/promises";
+import { createCipheriv } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
@@ -26,6 +27,26 @@ const preview = {
   sourceTitle: "Private dashboard",
   previewImageDataUrl: "data:image/jpeg;base64,AAAA",
 };
+const packagePayload = {
+  version: 1,
+  source: { url: preview.sourceUrl, title: preview.sourceTitle },
+  root: {
+    type: "frame",
+    name: "Captured page",
+    children: [{ type: "text", text: "Hello from encrypted cloud package" }],
+  },
+};
+
+function createEncryptedScenePackage(payload: unknown, keyValue = packageEncryptionKey): Buffer {
+  const magic = Buffer.from([0x57, 0x32, 0x46, 0x31]);
+  const iv = Buffer.alloc(12, 7);
+  const key = Buffer.from(keyValue, "base64url");
+  const plaintext = Buffer.from(JSON.stringify({ source: "web-to-figma", type: "capture-scene", payload }), "utf8");
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  cipher.setAAD(magic);
+  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  return Buffer.concat([magic, iv, ciphertext, cipher.getAuthTag()]);
+}
 
 async function connectInstallation(
   api: Awaited<ReturnType<typeof createApi>>,
@@ -101,7 +122,7 @@ test("Chrome uploads an account queue task that a later Figma connection can cla
   assert.equal(duplicateCreate.statusCode, 201);
   assert.equal(duplicateCreate.json().taskId, taskId);
 
-  const encryptedPackage = Buffer.from("encrypted scene package");
+  const encryptedPackage = createEncryptedScenePackage(packagePayload);
   const upload = await api.inject({
     method: "PUT",
     url: `/v1/conversion-jobs/${taskId}/package`,
@@ -143,6 +164,10 @@ test("Chrome uploads an account queue task that a later Figma connection can cla
   });
   assert.equal(claim.statusCode, 200);
   assert.deepEqual(claim.json().encryption, { algorithm: "A256GCM", key: packageEncryptionKey });
+  assert.deepEqual(claim.json().downloadJson, {
+    method: "GET",
+    url: `/v1/conversion-jobs/${taskId}/package-json`,
+  });
 
   const sameFigmaPendingAfterClaim = await api.inject({
     method: "GET",
@@ -182,7 +207,15 @@ test("Chrome uploads an account queue task that a later Figma connection can cla
     headers: { authorization: `Bearer ${figma.tokens.accessToken}` },
   });
   assert.equal(download.statusCode, 200);
-  assert.equal(download.body, encryptedPackage.toString());
+  assert.deepEqual(download.rawPayload, encryptedPackage);
+
+  const downloadJson = await api.inject({
+    method: "GET",
+    url: `/v1/conversion-jobs/${taskId}/package-json`,
+    headers: { authorization: `Bearer ${figma.tokens.accessToken}` },
+  });
+  assert.equal(downloadJson.statusCode, 200);
+  assert.deepEqual(downloadJson.json().payload, packagePayload);
 
   const imported = await api.inject({
     method: "POST",
