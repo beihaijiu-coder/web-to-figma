@@ -56,6 +56,7 @@ test("Chrome extension is packaged for clipboard handoff instead of JSON downloa
   assert.equal(popup.includes("new URLSearchParams(window.location.search).get(\"sourceTabId\")"), true);
   assert.equal(popup.includes("sourceTabId:"), true);
   assert.equal(background.includes("createCloudTaskPreview"), true);
+  assert.equal(background.includes("downscalePreviewInPage"), true);
   assert.equal(background.includes("submitCaptureToCloud(payload, msg.targetInstallationId || null, tab)"), true);
   assert.equal(popup.includes("账号任务队列"), true);
   assert.equal(popupHtml.includes("发送方式"), true);

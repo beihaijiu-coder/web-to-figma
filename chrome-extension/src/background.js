@@ -308,14 +308,57 @@ async function downscalePreviewDataUrl(dataUrl) {
   }
 }
 
+async function downscalePreviewInPage(tabId, dataUrl) {
+  try {
+    const [{ result }] = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: WORLD,
+      func: (input, maxWidth, maxHeight, maxLength) =>
+        new Promise((resolve) => {
+          const image = new Image();
+          image.onload = () => {
+            try {
+              const scale = Math.min(maxWidth / Math.max(1, image.naturalWidth), maxHeight / Math.max(1, image.naturalHeight), 1);
+              const canvas = document.createElement("canvas");
+              canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+              canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+              const context = canvas.getContext("2d");
+              if (!context) {
+                resolve(null);
+                return;
+              }
+              context.drawImage(image, 0, 0, canvas.width, canvas.height);
+              for (const quality of [0.72, 0.58, 0.44, 0.32, 0.22]) {
+                const output = canvas.toDataURL("image/jpeg", quality);
+                if (output.length <= maxLength) {
+                  resolve(output);
+                  return;
+                }
+              }
+              resolve(null);
+            } catch {
+              resolve(null);
+            }
+          };
+          image.onerror = () => resolve(null);
+          image.src = input;
+        }),
+      args: [dataUrl, CLOUD_TASK_PREVIEW_MAX_WIDTH, CLOUD_TASK_PREVIEW_MAX_HEIGHT, CLOUD_TASK_PREVIEW_MAX_DATA_URL_LENGTH],
+    });
+    return typeof result === "string" && result.startsWith("data:image/") ? result : null;
+  } catch {
+    return null;
+  }
+}
+
 async function captureCloudTaskPreview(tab) {
   if (!tab?.id || !tab?.windowId || !chrome.tabs.captureVisibleTab) return null;
   let ignoredUiHidden = false;
   try {
     await setIgnoredCaptureUiHidden(tab.id, true);
     ignoredUiHidden = true;
-    const raw = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "jpeg", quality: 72 });
-    return await downscalePreviewDataUrl(raw);
+    const raw = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "jpeg", quality: 60 });
+    return (await downscalePreviewInPage(tab.id, raw)) || (await downscalePreviewDataUrl(raw));
   } catch {
     return null;
   } finally {

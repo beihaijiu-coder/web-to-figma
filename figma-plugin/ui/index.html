@@ -836,7 +836,12 @@
     async function recoverStoredCloudTask() {
       if (!storedCloudTask?.taskId || !deviceAuth) return;
       const status = storedCloudTask.status;
-      if (status === "importing" || status === "claimed") {
+      if (status === "claimed") {
+        setAccountStatus("A claimed cloud task is ready to retry.");
+        await refreshPendingCloudJobs();
+        return;
+      }
+      if (status === "importing") {
         setAccountStatus("Cleaning an interrupted cloud import...");
         postToMain({ type: "cleanup-stale-cloud-task", taskId: storedCloudTask.taskId });
         return;
@@ -1036,6 +1041,7 @@
       if (accountBusy || activeCloudTask) return;
       setAccountBusy(true);
       let claimedTaskId = null;
+      let handedToImporter = false;
       try {
         if (!job) {
           setAccountStatus("Connected. No cloud task is waiting.");
@@ -1064,15 +1070,20 @@
         storedCloudTask = { taskId: claimedTaskId, status: "claimed" };
         postToMain({ type: "save-cloud-task", task: storedCloudTask });
         pendingCloudJobs = pendingCloudJobs.filter((candidate) => candidate.id !== job.id);
+        handedToImporter = true;
         importPayload(payload, claimedTaskId);
       } catch (error) {
-        if (claimedTaskId) {
+        if (claimedTaskId && handedToImporter) {
           try {
             activeCloudTask = { taskId: claimedTaskId };
             await reportCloudTask(claimedTaskId, "failed");
           } catch {
             storedCloudTask = { taskId: claimedTaskId, status: "failed_pending" };
           }
+        } else if (claimedTaskId) {
+          storedCloudTask = { taskId: claimedTaskId, status: "claimed" };
+          postToMain({ type: "save-cloud-task", task: storedCloudTask });
+          await refreshPendingCloudJobs().catch(() => undefined);
         }
         title.textContent = "Import failed";
         subtitle.textContent = error.message || String(error);

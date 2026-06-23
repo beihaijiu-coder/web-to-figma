@@ -354,8 +354,10 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
                package_encryption_key, package_encryption_algorithm, created_at
         FROM conversion_jobs
         WHERE user_id = $1
-          AND (target_installation_id IS NULL OR target_installation_id = $2)
-          AND status = 'uploaded'
+          AND (
+            (target_installation_id IS NULL AND status = 'uploaded')
+            OR (target_installation_id = $2 AND status IN ('uploaded', 'claimed', 'importing'))
+          )
           AND expires_at > $3
         ORDER BY created_at ASC
         LIMIT 20

@@ -144,6 +144,15 @@ test("Chrome uploads an account queue task that a later Figma connection can cla
   assert.equal(claim.statusCode, 200);
   assert.deepEqual(claim.json().encryption, { algorithm: "A256GCM", key: packageEncryptionKey });
 
+  const sameFigmaPendingAfterClaim = await api.inject({
+    method: "GET",
+    url: "/v1/conversion-jobs/pending",
+    headers: { authorization: `Bearer ${figma.tokens.accessToken}` },
+  });
+  assert.equal(sameFigmaPendingAfterClaim.statusCode, 200);
+  assert.equal(sameFigmaPendingAfterClaim.json().jobs[0].id, taskId);
+  assert.equal(sameFigmaPendingAfterClaim.json().jobs[0].status, "claimed");
+
   const secondFigmaPendingAfterClaim = await api.inject({
     method: "GET",
     url: "/v1/conversion-jobs/pending",
