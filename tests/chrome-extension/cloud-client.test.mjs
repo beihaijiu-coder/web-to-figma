@@ -163,6 +163,11 @@ test("cloud client creates account queue jobs without requiring a Figma target",
     accessToken: "chrome-token",
     idempotencyKey: "idempotent-account-queue-job",
     packageEncryptionKey: "A".repeat(43),
+    preview: {
+      sourceUrl: "https://example.com/page",
+      sourceTitle: "Example page",
+      previewImageDataUrl: "data:image/jpeg;base64,AAAA",
+    },
     fetchImpl: async (url, init) => {
       calls.push({ url, init });
       return jsonResponse(201, {
@@ -181,6 +186,11 @@ test("cloud client creates account queue jobs without requiring a Figma target",
   assert.deepEqual(JSON.parse(calls[0].init.body), {
     scenePackageVersion: 1,
     packageEncryptionKey: "A".repeat(43),
+    preview: {
+      sourceUrl: "https://example.com/page",
+      sourceTitle: "Example page",
+      previewImageDataUrl: "data:image/jpeg;base64,AAAA",
+    },
   });
 });
 

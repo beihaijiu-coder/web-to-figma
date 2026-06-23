@@ -49,6 +49,19 @@ const refreshTokenSchema = z.object({
 
 const createConversionJobSchema = z.object({
   targetInstallationId: z.string().uuid().nullable().optional(),
+  preview: z
+    .object({
+      sourceUrl: z.string().trim().max(2048).nullable().optional(),
+      sourceTitle: z.string().trim().max(240).nullable().optional(),
+      previewImageDataUrl: z
+        .string()
+        .trim()
+        .max(450_000)
+        .regex(/^data:image\/(?:png|jpeg|jpg|webp);base64,/)
+        .nullable()
+        .optional(),
+    })
+    .optional(),
   scenePackageVersion: z.number().int().min(1).max(100).optional(),
   packageEncryptionKey: z
     .string()
@@ -351,6 +364,9 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
         const job = await conversionJobs.createUploadJob({
           principal,
           targetInstallationId: parsed.data.targetInstallationId ?? null,
+          sourceUrl: parsed.data.preview?.sourceUrl || null,
+          sourceTitle: parsed.data.preview?.sourceTitle || null,
+          previewImageDataUrl: parsed.data.preview?.previewImageDataUrl || null,
           idempotencyKey: idempotencyKey.trim(),
           scenePackageVersion: parsed.data.scenePackageVersion ?? null,
           packageEncryptionKey: parsed.data.packageEncryptionKey,
@@ -454,6 +470,9 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
           id: job.id,
           status: job.status,
           expiresAt: job.expiresAt,
+          sourceUrl: job.sourceUrl,
+          sourceTitle: job.sourceTitle,
+          previewImageDataUrl: job.previewImageDataUrl,
           scenePackageVersion: job.scenePackageVersion,
           packageSizeBytes: job.packageSizeBytes,
           packageSha256: job.packageSha256,

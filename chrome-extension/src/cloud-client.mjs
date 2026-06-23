@@ -349,6 +349,7 @@ export async function createConversionJob({
   baseUrl,
   accessToken,
   targetInstallationId,
+  preview,
   idempotencyKey,
   packageEncryptionKey,
   scenePackageVersion = 1,
@@ -356,6 +357,7 @@ export async function createConversionJob({
 }) {
   const requestBody = { scenePackageVersion, packageEncryptionKey };
   if (targetInstallationId) requestBody.targetInstallationId = targetInstallationId;
+  if (preview) requestBody.preview = preview;
   const { body } = await requestJson({
     baseUrl,
     path: "/v1/conversion-jobs",

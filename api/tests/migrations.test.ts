@@ -13,6 +13,7 @@ test("migrations are ordered and create the identity and usage tables", async ()
       "0002_conversion_usage.sql",
       "0003_device_connections.sql",
       "0004_conversion_package_encryption.sql",
+      "0005_conversion_job_preview.sql",
     ]
   );
 

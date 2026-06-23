@@ -227,6 +227,7 @@ sequenceDiagram
 ### 核心原则
 
 - 首发默认采用“账号任务队列”：Chrome 扩展创建任务时可以不指定 `target_installation_id`，任务先归属当前内部用户；Figma 插件登录后查询同一用户未领取的已上传任务。
+- Chrome 扩展创建任务时可随任务保存页面标题、URL 与小尺寸缩略图，用于 Figma 插件展示“待导入采集卡片”；这些元数据只用于短期任务识别，不改变转换包仍由临时对象存储传递的边界。
 - Figma 插件领取任务时，API 必须在同一事务中把空的 `target_installation_id` 写成当前 Figma installation；领取之后只有该 installation 能下载、完成、失败或取消该任务，避免多设备串单。
 - 仍保留可选的定向投递能力：如果 Chrome 扩展显式传入 `target_installation_id`，API 继续验证目标 Figma installation 与内部用户之间的归属关系。
 - Free 的额度在建任务时预占，在完整导入成功时结算；预占不等于已消耗。取消、采集失败、上传过期、无人领取或导入失败必须原子释放预占。

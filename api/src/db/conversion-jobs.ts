@@ -19,6 +19,9 @@ type JobRow = {
   object_key: string | null;
   expires_at: Date;
   target_installation_id: string | null;
+  source_url: string | null;
+  source_title: string | null;
+  preview_image_data_url: string | null;
   scene_package_version: number | null;
   package_size_bytes: string | null;
   package_sha256: string | null;
@@ -44,6 +47,9 @@ function jobSummary(row: JobRow): ConversionJobSummary {
     objectKey: row.object_key,
     expiresAt: row.expires_at.toISOString(),
     targetInstallationId: row.target_installation_id,
+    sourceUrl: row.source_url,
+    sourceTitle: row.source_title,
+    previewImageDataUrl: row.preview_image_data_url,
     scenePackageVersion: row.scene_package_version,
     packageSizeBytes: row.package_size_bytes === null ? null : Number(row.package_size_bytes),
     packageSha256: row.package_sha256,
@@ -57,6 +63,7 @@ async function selectJob(client: pg.PoolClient, jobId: string): Promise<Conversi
   const result = await client.query<JobRow>(
     `
       SELECT id, status, object_key, expires_at, target_installation_id,
+             source_url, source_title, preview_image_data_url,
              scene_package_version, package_size_bytes::text, package_sha256,
              package_encryption_key, package_encryption_algorithm, created_at
       FROM conversion_jobs
@@ -77,6 +84,9 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
   async createUploadJob(input: {
     principal: DevicePrincipal;
     targetInstallationId: string | null;
+    sourceUrl: string | null;
+    sourceTitle: string | null;
+    previewImageDataUrl: string | null;
     idempotencyKey: string;
     scenePackageVersion: number | null;
     packageEncryptionKey: string;
@@ -92,6 +102,7 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
       const existing = await client.query<JobRow>(
         `
           SELECT id, status, object_key, expires_at, target_installation_id,
+                 source_url, source_title, preview_image_data_url,
                  scene_package_version, package_size_bytes::text, package_sha256,
                  package_encryption_key, package_encryption_algorithm, created_at
           FROM conversion_jobs
@@ -221,6 +232,9 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
             user_id,
             source_installation_id,
             target_installation_id,
+            source_url,
+            source_title,
+            preview_image_data_url,
             status,
             idempotency_key,
             object_key,
@@ -228,8 +242,9 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
             package_encryption_key,
             expires_at
           )
-          VALUES ($1, $2, $3, $4, 'upload_issued', $5, $6, $7, $8, $9)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, 'upload_issued', $8, $9, $10, $11, $12)
           RETURNING id, status, object_key, expires_at, target_installation_id,
+                    source_url, source_title, preview_image_data_url,
                     scene_package_version, package_size_bytes::text, package_sha256,
                     package_encryption_key, package_encryption_algorithm, created_at
         `,
@@ -238,6 +253,9 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
           input.principal.userId,
           input.principal.installationId,
           input.targetInstallationId,
+          input.sourceUrl,
+          input.sourceTitle,
+          input.previewImageDataUrl,
           input.idempotencyKey,
           objectKey,
           input.scenePackageVersion,
@@ -280,6 +298,7 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
             AND source_installation_id = $3
             AND status = 'upload_issued'
           RETURNING id, status, object_key, expires_at, target_installation_id,
+                    source_url, source_title, preview_image_data_url,
                     scene_package_version, package_size_bytes::text, package_sha256,
                     package_encryption_key, package_encryption_algorithm, created_at
         `,
@@ -310,6 +329,7 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
     const result = await this.#pool.query<JobRow>(
       `
         SELECT id, status, object_key, expires_at, target_installation_id,
+               source_url, source_title, preview_image_data_url,
                scene_package_version, package_size_bytes::text, package_sha256,
                package_encryption_key, package_encryption_algorithm, created_at
         FROM conversion_jobs
@@ -329,6 +349,7 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
     const result = await this.#pool.query<JobRow>(
       `
         SELECT id, status, object_key, expires_at, target_installation_id,
+               source_url, source_title, preview_image_data_url,
                scene_package_version, package_size_bytes::text, package_sha256,
                package_encryption_key, package_encryption_algorithm, created_at
         FROM conversion_jobs
@@ -357,6 +378,7 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
           AND (target_installation_id IS NULL OR target_installation_id = $3)
           AND status = 'uploaded'
         RETURNING id, status, object_key, expires_at, target_installation_id,
+                  source_url, source_title, preview_image_data_url,
                   scene_package_version, package_size_bytes::text, package_sha256,
                   package_encryption_key, package_encryption_algorithm, created_at
       `,
@@ -367,6 +389,7 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
     const existing = await this.#pool.query<JobRow>(
       `
         SELECT id, status, object_key, expires_at, target_installation_id,
+               source_url, source_title, preview_image_data_url,
                scene_package_version, package_size_bytes::text, package_sha256,
                package_encryption_key, package_encryption_algorithm, created_at
         FROM conversion_jobs
@@ -393,6 +416,7 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
           AND status IN ('claimed', 'importing')
           AND expires_at > $4
         RETURNING id, status, object_key, expires_at, target_installation_id,
+                  source_url, source_title, preview_image_data_url,
                   scene_package_version, package_size_bytes::text, package_sha256,
                   package_encryption_key, package_encryption_algorithm, created_at
       `,
@@ -494,6 +518,7 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
       const job = await client.query<JobRow>(
         `
           SELECT id, status, object_key, expires_at, target_installation_id,
+                 source_url, source_title, preview_image_data_url,
                  scene_package_version, package_size_bytes::text, package_sha256,
                  package_encryption_key, package_encryption_algorithm, created_at
           FROM conversion_jobs
@@ -529,6 +554,7 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
           SET status = $4, completed_at = $5, updated_at = $5
           WHERE id = $1 AND user_id = $2 AND ${installationColumn} = $3
           RETURNING id, status, object_key, expires_at, target_installation_id,
+                    source_url, source_title, preview_image_data_url,
                     scene_package_version, package_size_bytes::text, package_sha256,
                     package_encryption_key, package_encryption_algorithm, created_at
         `,

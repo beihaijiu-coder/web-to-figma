@@ -188,6 +188,140 @@
       line-height: 1.4;
     }
 
+    .cloud-header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 10px;
+      padding-top: 2px;
+    }
+
+    .cloud-heading {
+      display: grid;
+      gap: 2px;
+    }
+
+    .cloud-heading strong {
+      font-size: 16px;
+      letter-spacing: -0.02em;
+    }
+
+    .cloud-heading small {
+      color: #8b93a3;
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .refresh {
+      border-radius: 999px;
+      padding: 8px 11px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .cloud-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      min-height: 78px;
+    }
+
+    .cloud-empty {
+      grid-column: 1 / -1;
+      min-height: 78px;
+      display: grid;
+      place-items: center;
+      border: 1px dashed rgba(148, 163, 184, 0.26);
+      border-radius: 13px;
+      color: #8b93a3;
+      font-size: 12px;
+      text-align: center;
+      padding: 12px;
+    }
+
+    .cloud-task-card {
+      width: 100%;
+      min-width: 0;
+      border: 1px solid rgba(129, 140, 248, 0.62);
+      border-radius: 12px;
+      background: rgba(3, 7, 18, 0.58);
+      color: #f8fafc;
+      padding: 0;
+      overflow: hidden;
+      cursor: pointer;
+      text-align: left;
+      transition: border-color 120ms ease, transform 120ms ease, background 120ms ease;
+    }
+
+    .cloud-task-card:hover:not(:disabled) {
+      border-color: #93c5fd;
+      background: rgba(15, 23, 42, 0.86);
+      transform: translateY(-1px);
+    }
+
+    .cloud-task-card:disabled {
+      opacity: 0.62;
+      cursor: default;
+    }
+
+    .cloud-preview {
+      aspect-ratio: 16 / 10;
+      display: grid;
+      place-items: center;
+      background:
+        linear-gradient(135deg, rgba(59, 130, 246, 0.18), rgba(168, 85, 247, 0.12)),
+        #050816;
+      overflow: hidden;
+    }
+
+    .cloud-preview img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .cloud-preview-fallback {
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      background: rgba(59, 130, 246, 0.24);
+      color: #93c5fd;
+      font-weight: 850;
+      font-size: 22px;
+    }
+
+    .cloud-meta {
+      display: grid;
+      gap: 3px;
+      padding: 9px 10px 10px;
+    }
+
+    .cloud-title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 13px;
+      font-weight: 760;
+    }
+
+    .cloud-url-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      color: #8b93a3;
+      font-size: 11px;
+    }
+
+    .cloud-url {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     .button-row {
       display: grid;
       grid-template-columns: 1fr auto;
@@ -368,7 +502,14 @@
           <button id="connectAccountBtn" class="secondary" type="button">Connect account</button>
           <button id="disconnectAccountBtn" class="neutral" type="button">Disconnect</button>
         </div>
-        <button id="importCloudBtn" class="primary" type="button" disabled>Check cloud tasks</button>
+        <div class="cloud-header">
+          <div class="cloud-heading">
+            <strong>Captures</strong>
+            <small>Chrome captures uploaded to your account queue.</small>
+          </div>
+          <button id="importCloudBtn" class="neutral refresh" type="button" disabled>Refresh</button>
+        </div>
+        <div id="cloudTaskGrid" class="cloud-grid" aria-live="polite"></div>
         <p id="accountStatus" class="account-status" aria-live="polite"></p>
       </section>
       <button id="importClipboardBtn" class="primary" type="button">Import clipboard capture</button>
@@ -414,6 +555,7 @@
     const disconnectAccountBtn = document.getElementById("disconnectAccountBtn");
     const accountStatus = document.getElementById("accountStatus");
     const importCloudBtn = document.getElementById("importCloudBtn");
+    const cloudTaskGrid = document.getElementById("cloudTaskGrid");
     let lastPayload = null;
     let deviceAuth = null;
     let accountBusy = false;
@@ -434,6 +576,102 @@
       connectAccountBtn.disabled = busy;
       disconnectAccountBtn.disabled = busy;
       importCloudBtn.disabled = busy || !deviceAuth;
+      for (const card of cloudTaskGrid.querySelectorAll(".cloud-task-card")) {
+        card.disabled = busy;
+      }
+    }
+
+    function readableUrl(rawValue) {
+      const value = String(rawValue || "").trim();
+      if (!value) return "Unknown source";
+      try {
+        const url = new URL(value);
+        return `${url.hostname}${url.pathname === "/" ? "" : url.pathname}`;
+      } catch {
+        return value;
+      }
+    }
+
+    function shortAge(isoValue) {
+      const time = Date.parse(isoValue || "");
+      if (!Number.isFinite(time)) return "";
+      const seconds = Math.max(0, Math.floor((Date.now() - time) / 1000));
+      if (seconds < 60) return "just now";
+      const minutes = Math.floor(seconds / 60);
+      if (minutes < 60) return `${minutes}m ago`;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return `${hours}h ago`;
+      const days = Math.floor(hours / 24);
+      return `${days}d ago`;
+    }
+
+    function taskTitle(job) {
+      return String(job?.sourceTitle || readableUrl(job?.sourceUrl) || "Untitled capture").trim();
+    }
+
+    function renderCloudJobs() {
+      cloudTaskGrid.replaceChildren();
+
+      if (!deviceAuth) {
+        const empty = document.createElement("div");
+        empty.className = "cloud-empty";
+        empty.textContent = "Connect your account to see Chrome captures here.";
+        cloudTaskGrid.append(empty);
+        return;
+      }
+
+      if (!pendingCloudJobs.length) {
+        const empty = document.createElement("div");
+        empty.className = "cloud-empty";
+        empty.textContent = "No cloud captures yet. Capture a page in Chrome, then refresh.";
+        cloudTaskGrid.append(empty);
+        return;
+      }
+
+      for (const job of pendingCloudJobs) {
+        const card = document.createElement("button");
+        card.type = "button";
+        card.className = "cloud-task-card";
+        card.disabled = accountBusy;
+        card.title = `Import ${taskTitle(job)}`;
+        card.onclick = () => importCloudJob(job);
+
+        const preview = document.createElement("div");
+        preview.className = "cloud-preview";
+        if (job.previewImageDataUrl) {
+          const image = document.createElement("img");
+          image.src = job.previewImageDataUrl;
+          image.alt = "";
+          preview.append(image);
+        } else {
+          const fallback = document.createElement("div");
+          fallback.className = "cloud-preview-fallback";
+          fallback.textContent = "W";
+          preview.append(fallback);
+        }
+
+        const meta = document.createElement("div");
+        meta.className = "cloud-meta";
+
+        const titleNode = document.createElement("div");
+        titleNode.className = "cloud-title";
+        titleNode.textContent = taskTitle(job);
+
+        const urlRow = document.createElement("div");
+        urlRow.className = "cloud-url-row";
+
+        const urlNode = document.createElement("span");
+        urlNode.className = "cloud-url";
+        urlNode.textContent = readableUrl(job.sourceUrl);
+
+        const ageNode = document.createElement("span");
+        ageNode.textContent = shortAge(job.createdAt);
+
+        urlRow.append(urlNode, ageNode);
+        meta.append(titleNode, urlRow);
+        card.append(preview, meta);
+        cloudTaskGrid.append(card);
+      }
     }
 
     function normalizeApiBaseUrl(rawValue) {
@@ -531,6 +769,7 @@
       };
       postToMain({ type: "save-device-auth", ...deviceAuth });
       importCloudBtn.disabled = false;
+      renderCloudJobs();
     }
 
     async function refreshDeviceAuth(auth) {
@@ -563,19 +802,19 @@
       if (!deviceAuth) {
         pendingCloudJobs = [];
         importCloudBtn.disabled = true;
-        importCloudBtn.textContent = "Check cloud tasks";
+        importCloudBtn.textContent = "Refresh";
+        renderCloudJobs();
         return [];
       }
       const accessToken = await ensureDeviceAccessToken();
       const result = await apiJson("/v1/conversion-jobs/pending", { accessToken });
       pendingCloudJobs = Array.isArray(result.body?.jobs) ? result.body.jobs : [];
       importCloudBtn.disabled = false;
-      importCloudBtn.textContent = pendingCloudJobs.length
-        ? `Import cloud task (${pendingCloudJobs.length})`
-        : "Check cloud tasks";
+      importCloudBtn.textContent = "Refresh";
+      renderCloudJobs();
       setAccountStatus(
         pendingCloudJobs.length
-          ? `${pendingCloudJobs.length} encrypted task${pendingCloudJobs.length === 1 ? "" : "s"} ready.`
+          ? `${pendingCloudJobs.length} capture${pendingCloudJobs.length === 1 ? "" : "s"} ready. Click a card to import.`
           : "Connected. No cloud task is waiting."
       );
       return pendingCloudJobs;
@@ -781,9 +1020,11 @@
           await apiJson("/v1/device/me", { method: "DELETE", accessToken });
         }
         deviceAuth = null;
+        pendingCloudJobs = [];
         postToMain({ type: "clear-device-auth" });
         setAccountStatus("Disconnected and revoked on this Figma plugin.");
         importCloudBtn.disabled = true;
+        renderCloudJobs();
       } catch (error) {
         setAccountStatus(error.message || String(error));
       } finally {
@@ -791,13 +1032,11 @@
       }
     };
 
-    importCloudBtn.onclick = async () => {
+    async function importCloudJob(job) {
       if (accountBusy || activeCloudTask) return;
       setAccountBusy(true);
       let claimedTaskId = null;
       try {
-        const jobs = pendingCloudJobs.length ? pendingCloudJobs : await refreshPendingCloudJobs();
-        const job = jobs[0];
         if (!job) {
           setAccountStatus("Connected. No cloud task is waiting.");
           return;
@@ -837,6 +1076,18 @@
         }
         title.textContent = "Import failed";
         subtitle.textContent = error.message || String(error);
+        setAccountStatus(error.message || String(error));
+      } finally {
+        setAccountBusy(false);
+      }
+    }
+
+    importCloudBtn.onclick = async () => {
+      if (accountBusy || activeCloudTask) return;
+      setAccountBusy(true);
+      try {
+        await refreshPendingCloudJobs();
+      } catch (error) {
         setAccountStatus(error.message || String(error));
       } finally {
         setAccountBusy(false);
@@ -917,6 +1168,8 @@
       if (msg.type === "device-auth") {
         if (!msg.auth) {
           setAccountStatus("Not connected.");
+          pendingCloudJobs = [];
+          renderCloudJobs();
           return;
         }
 
@@ -940,7 +1193,9 @@
 
       if (msg.type === "device-auth-cleared") {
         setAccountStatus("Not connected.");
+        pendingCloudJobs = [];
         importCloudBtn.disabled = true;
+        renderCloudJobs();
         return;
       }
 
@@ -992,6 +1247,7 @@
     };
 
     setAccountStatus("Checking connection...");
+    renderCloudJobs();
     postToMain({ type: "get-device-auth" });
     postToMain({ type: "get-cloud-task" });
   </script>

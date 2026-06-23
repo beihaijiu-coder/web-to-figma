@@ -27,6 +27,9 @@ export type ConversionJobSummary = {
   objectKey: string;
   expiresAt: string;
   targetInstallationId: string | null;
+  sourceUrl: string | null;
+  sourceTitle: string | null;
+  previewImageDataUrl: string | null;
   scenePackageVersion: number | null;
   packageSizeBytes: number | null;
   packageSha256: string | null;
@@ -62,6 +65,9 @@ export interface ConversionJobRepository {
   createUploadJob(input: {
     principal: DevicePrincipal;
     targetInstallationId: string | null;
+    sourceUrl: string | null;
+    sourceTitle: string | null;
+    previewImageDataUrl: string | null;
     idempotencyKey: string;
     scenePackageVersion: number | null;
     packageEncryptionKey: string;

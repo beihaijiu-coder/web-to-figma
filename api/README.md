@@ -58,10 +58,10 @@ curl http://127.0.0.1:8787/health
 
 ### Conversion handoff
 
-- `POST /v1/conversion-jobs` — Chrome-extension token creates an account-queue task with an `Idempotency-Key` and reserves Free quota when needed. `targetInstallationId` is optional for direct targeting.
+- `POST /v1/conversion-jobs` — Chrome-extension token creates an account-queue task with an `Idempotency-Key` and reserves Free quota when needed. `targetInstallationId` is optional for direct targeting; `preview` may include the captured page title, URL, and thumbnail for the Figma task grid.
 - `PUT /v1/conversion-jobs/:jobId/package` — Chrome-extension token uploads the encrypted scene package to the local development package store.
 - `POST /v1/conversion-jobs/:jobId/capture-failed` — Chrome-extension token releases a reservation when encryption or upload cannot complete.
-- `GET /v1/conversion-jobs/pending` — Figma-plugin token lists uploaded tasks for the same account that are either unclaimed or already assigned to that installation.
+- `GET /v1/conversion-jobs/pending` — Figma-plugin token lists uploaded tasks for the same account that are either unclaimed or already assigned to that installation, including card-preview metadata.
 - `POST /v1/conversion-jobs/:jobId/claim` — Figma-plugin token claims a task, atomically binds unclaimed account-queue tasks to that installation, and receives the package download URL.
 - `GET /v1/conversion-jobs/:jobId/package` — Figma-plugin token downloads the encrypted package.
 - `POST /v1/conversion-jobs/:jobId/imported` — Figma-plugin token marks success; Free reservation is settled into one usage event and the local package is deleted.

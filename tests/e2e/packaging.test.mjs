@@ -55,7 +55,8 @@ test("Chrome extension is packaged for clipboard handoff instead of JSON downloa
   assert.equal(toolbar.includes("账号任务队列"), true);
   assert.equal(popup.includes("new URLSearchParams(window.location.search).get(\"sourceTabId\")"), true);
   assert.equal(popup.includes("sourceTabId:"), true);
-  assert.equal(background.includes("submitCaptureToCloud(payload, msg.targetInstallationId || null)"), true);
+  assert.equal(background.includes("createCloudTaskPreview"), true);
+  assert.equal(background.includes("submitCaptureToCloud(payload, msg.targetInstallationId || null, tab)"), true);
   assert.equal(popup.includes("账号任务队列"), true);
   assert.equal(popupHtml.includes("发送方式"), true);
   assert.equal(popupHtml.includes("账号任务队列（推荐）"), true);
@@ -92,6 +93,9 @@ test("Figma plugin UI stays focused on import progress without commercial/report
   assert.equal(ui.includes('window.addEventListener("paste"'), true);
   assert.equal(ui.includes("tryImportCaptureText"), true);
   assert.equal(ui.includes("Open URL in Chrome"), true);
+  assert.equal(ui.includes("cloudTaskGrid"), true);
+  assert.equal(ui.includes("cloud-task-card"), true);
+  assert.equal(ui.includes("previewImageDataUrl"), true);
   assert.equal(ui.includes("Cancel"), true);
   assert.equal(ui.includes("Partial layers were removed from Figma."), true);
   assert.equal(ui.includes("Partial layers were kept in Figma."), false);

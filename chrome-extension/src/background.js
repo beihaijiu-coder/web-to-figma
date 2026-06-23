@@ -36,6 +36,9 @@ const WEB_TO_FIGMA_REFRESH_TOKEN_KEY = "webToFigmaRefreshToken";
 const WEB_TO_FIGMA_REFRESH_TOKEN_EXPIRES_AT_KEY = "webToFigmaRefreshTokenExpiresAt";
 const WEB_TO_FIGMA_PENDING_CONNECTION_KEY = "webToFigmaPendingConnection";
 const WEB_TO_FIGMA_CLIENT_TYPE = "chrome_extension";
+const CLOUD_TASK_PREVIEW_MAX_WIDTH = 560;
+const CLOUD_TASK_PREVIEW_MAX_HEIGHT = 320;
+const CLOUD_TASK_PREVIEW_MAX_DATA_URL_LENGTH = 450_000;
 
 const figmaProxyQueue = [];
 const figmaProxyInFlight = new Map();
@@ -246,7 +249,90 @@ async function startCloudAccountConnection() {
   };
 }
 
-async function submitCaptureToCloud(payload, targetInstallationId = null) {
+function truncateText(value, maxLength) {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  return text.length > maxLength ? text.slice(0, maxLength) : text;
+}
+
+function sourceUrlFromPayload(payload, tab) {
+  return truncateText(payload?.source?.url || payload?.url || tab?.url || "", 2048);
+}
+
+function sourceTitleFromPayload(payload, tab) {
+  return truncateText(payload?.source?.title || payload?.title || tab?.title || "", 240);
+}
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.slice(index, index + chunkSize));
+  }
+  return btoa(binary);
+}
+
+async function blobToDataUrl(blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  return `data:${blob.type || "image/jpeg"};base64,${bytesToBase64(bytes)}`;
+}
+
+async function downscalePreviewDataUrl(dataUrl) {
+  if (typeof createImageBitmap !== "function" || typeof OffscreenCanvas === "undefined") {
+    return dataUrl.length <= CLOUD_TASK_PREVIEW_MAX_DATA_URL_LENGTH ? dataUrl : null;
+  }
+
+  const sourceBlob = await (await fetch(dataUrl)).blob();
+  const bitmap = await createImageBitmap(sourceBlob);
+  try {
+    const scale = Math.min(
+      CLOUD_TASK_PREVIEW_MAX_WIDTH / Math.max(1, bitmap.width),
+      CLOUD_TASK_PREVIEW_MAX_HEIGHT / Math.max(1, bitmap.height),
+      1
+    );
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = new OffscreenCanvas(width, height);
+    const context = canvas.getContext("2d");
+    if (!context) return null;
+    context.drawImage(bitmap, 0, 0, width, height);
+
+    for (const quality of [0.72, 0.58, 0.44]) {
+      const blob = await canvas.convertToBlob({ type: "image/jpeg", quality });
+      const preview = await blobToDataUrl(blob);
+      if (preview.length <= CLOUD_TASK_PREVIEW_MAX_DATA_URL_LENGTH) return preview;
+    }
+    return null;
+  } finally {
+    if (typeof bitmap.close === "function") bitmap.close();
+  }
+}
+
+async function captureCloudTaskPreview(tab) {
+  if (!tab?.id || !tab?.windowId || !chrome.tabs.captureVisibleTab) return null;
+  let ignoredUiHidden = false;
+  try {
+    await setIgnoredCaptureUiHidden(tab.id, true);
+    ignoredUiHidden = true;
+    const raw = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "jpeg", quality: 72 });
+    return await downscalePreviewDataUrl(raw);
+  } catch {
+    return null;
+  } finally {
+    if (ignoredUiHidden) await setIgnoredCaptureUiHidden(tab.id, false);
+  }
+}
+
+async function createCloudTaskPreview(payload, tab) {
+  const previewImageDataUrl = await captureCloudTaskPreview(tab);
+  return {
+    sourceUrl: sourceUrlFromPayload(payload, tab),
+    sourceTitle: sourceTitleFromPayload(payload, tab),
+    previewImageDataUrl,
+  };
+}
+
+async function submitCaptureToCloud(payload, targetInstallationId = null, tab = null) {
   const baseUrl = await getCloudApiBaseUrl();
   const accessToken = await getCloudAccessToken(baseUrl);
   if (!accessToken) {
@@ -257,11 +343,13 @@ async function submitCaptureToCloud(payload, targetInstallationId = null) {
   }
 
   const encrypted = await encryptSceneCapture(payload);
+  const preview = await createCloudTaskPreview(payload, tab);
   const idempotencyKey = `capture-${Date.now()}-${crypto.randomUUID()}`;
   const job = await createConversionJob({
     baseUrl,
     accessToken,
     targetInstallationId,
+    preview,
     idempotencyKey,
     packageEncryptionKey: encrypted.packageEncryptionKey,
     scenePackageVersion: encrypted.version,
@@ -975,7 +1063,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
       if (canUploadToCloud) {
         try {
-          handoff = await submitCaptureToCloud(payload, msg.targetInstallationId || null);
+          handoff = await submitCaptureToCloud(payload, msg.targetInstallationId || null, tab);
         } catch (error) {
           handoffError = {
             message: error?.message || String(error),

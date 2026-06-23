@@ -21,6 +21,11 @@ const authenticator: Authenticator = {
 };
 
 const packageEncryptionKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+const preview = {
+  sourceUrl: "https://example.com/private-page",
+  sourceTitle: "Private dashboard",
+  previewImageDataUrl: "data:image/jpeg;base64,AAAA",
+};
 
 async function connectInstallation(
   api: Awaited<ReturnType<typeof createApi>>,
@@ -79,7 +84,7 @@ test("Chrome uploads an account queue task that a later Figma connection can cla
       authorization: `Bearer ${chrome.tokens.accessToken}`,
       "idempotency-key": "conversion-job-1",
     },
-    payload: { scenePackageVersion: 1, packageEncryptionKey },
+    payload: { scenePackageVersion: 1, packageEncryptionKey, preview },
   });
   assert.equal(createJob.statusCode, 201);
   const taskId = createJob.json().taskId as string;
@@ -91,7 +96,7 @@ test("Chrome uploads an account queue task that a later Figma connection can cla
       authorization: `Bearer ${chrome.tokens.accessToken}`,
       "idempotency-key": "conversion-job-1",
     },
-    payload: { scenePackageVersion: 1, packageEncryptionKey },
+    payload: { scenePackageVersion: 1, packageEncryptionKey, preview },
   });
   assert.equal(duplicateCreate.statusCode, 201);
   assert.equal(duplicateCreate.json().taskId, taskId);
@@ -117,6 +122,9 @@ test("Chrome uploads an account queue task that a later Figma connection can cla
   });
   assert.equal(pending.statusCode, 200);
   assert.equal(pending.json().jobs[0].id, taskId);
+  assert.equal(pending.json().jobs[0].sourceUrl, preview.sourceUrl);
+  assert.equal(pending.json().jobs[0].sourceTitle, preview.sourceTitle);
+  assert.equal(pending.json().jobs[0].previewImageDataUrl, preview.previewImageDataUrl);
   assert.equal(pending.json().jobs[0].packageEncryptionKey, undefined);
 
   const secondFigma = await connectInstallation(api, "figma_plugin");
