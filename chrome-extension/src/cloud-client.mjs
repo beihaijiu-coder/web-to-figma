@@ -354,13 +354,15 @@ export async function createConversionJob({
   scenePackageVersion = 1,
   fetchImpl,
 }) {
+  const requestBody = { scenePackageVersion, packageEncryptionKey };
+  if (targetInstallationId) requestBody.targetInstallationId = targetInstallationId;
   const { body } = await requestJson({
     baseUrl,
     path: "/v1/conversion-jobs",
     method: "POST",
     accessToken,
     idempotencyKey,
-    body: { targetInstallationId, scenePackageVersion, packageEncryptionKey },
+    body: requestBody,
     acceptedStatuses: [201],
     fetchImpl,
   });

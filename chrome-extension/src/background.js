@@ -246,7 +246,7 @@ async function startCloudAccountConnection() {
   };
 }
 
-async function submitCaptureToCloud(payload, targetInstallationId) {
+async function submitCaptureToCloud(payload, targetInstallationId = null) {
   const baseUrl = await getCloudApiBaseUrl();
   const accessToken = await getCloudAccessToken(baseUrl);
   if (!accessToken) {
@@ -284,7 +284,7 @@ async function submitCaptureToCloud(payload, targetInstallationId) {
       taskId: job.taskId,
       status: uploaded.status,
       expiresAt: job.expiresAt,
-      targetInstallationId,
+      targetInstallationId: targetInstallationId || null,
       packageSizeBytes: encrypted.body.byteLength,
     };
   } catch (error) {
@@ -963,9 +963,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const proxyEntries = figmaProxyDiagnostics.slice(proxyDiagStart);
       let handoff = null;
       let handoffError = null;
-      if (msg.targetInstallationId) {
+      let canUploadToCloud = false;
+      try {
+        canUploadToCloud = Boolean(await getCloudAccessToken(await getCloudApiBaseUrl()));
+      } catch (error) {
+        handoffError = {
+          message: error?.message || String(error),
+          code: error?.code || "CLOUD_STATUS_FAILED",
+          status: error?.status || 0,
+        };
+      }
+      if (canUploadToCloud) {
         try {
-          handoff = await submitCaptureToCloud(payload, msg.targetInstallationId);
+          handoff = await submitCaptureToCloud(payload, msg.targetInstallationId || null);
         } catch (error) {
           handoffError = {
             message: error?.message || String(error),

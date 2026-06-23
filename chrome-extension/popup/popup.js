@@ -66,15 +66,13 @@ function normalizeConcurrency(value) {
 
 function renderFigmaTargets(installations, selectedId = figmaTarget.value) {
   const targets = Array.isArray(installations) ? installations : [];
-  figmaTarget.replaceChildren(new Option("剪贴板手动导入", ""));
+  figmaTarget.replaceChildren(new Option("账号任务队列（推荐）", ""));
   for (const [index, installation] of targets.entries()) {
-    const label = installation.displayName || `Figma 插件 ${index + 1}`;
+    const label = installation.displayName || `定向到 Figma 插件 ${index + 1}`;
     figmaTarget.append(new Option(label, installation.id));
   }
   if (targets.some((installation) => installation.id === selectedId)) {
     figmaTarget.value = selectedId;
-  } else if (targets.length === 1) {
-    figmaTarget.value = targets[0].id;
   }
   chrome.storage.local.set({ [TARGET_INSTALLATION_KEY]: figmaTarget.value });
 }
@@ -92,12 +90,7 @@ async function refreshCloudStatus() {
     if (res.connected) {
       const stored = await chrome.storage.local.get({ [TARGET_INSTALLATION_KEY]: "" });
       renderFigmaTargets(res.figmaInstallations, stored[TARGET_INSTALLATION_KEY]);
-      const targets = Array.isArray(res.figmaInstallations) ? res.figmaInstallations.length : 0;
-      setCloudStatus(
-        targets > 0
-          ? `已连接。选择目标 Figma 插件后，采集结果会加密发送。`
-          : "已连接，但还没有已连接的 Figma 插件。"
-      );
+      setCloudStatus("已连接。采集结果会加密上传到账号任务队列，Figma 插件登录后可领取。");
       return;
     }
 
@@ -232,7 +225,7 @@ captureBtn.addEventListener("click", () => {
 
     if (res.handoff) {
       pendingCopyPayload = null;
-      setStatus("已加密发送到选定的 Figma 插件。请回到 Figma 领取并导入。");
+      setStatus("已加密上传到账号任务队列。请回到 Figma 插件领取并导入。");
       setTimeout(() => window.close(), 1100);
       return;
     }

@@ -34,7 +34,7 @@ type EntitlementRow = {
 };
 
 function jobSummary(row: JobRow): ConversionJobSummary {
-  if (!row.object_key || !row.target_installation_id) throw new Error("Conversion job row is incomplete");
+  if (!row.object_key) throw new Error("Conversion job row is incomplete");
   if (!row.package_encryption_key || row.package_encryption_algorithm !== "A256GCM") {
     throw new Error("Conversion job encryption metadata is incomplete");
   }
@@ -76,7 +76,7 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
 
   async createUploadJob(input: {
     principal: DevicePrincipal;
-    targetInstallationId: string;
+    targetInstallationId: string | null;
     idempotencyKey: string;
     scenePackageVersion: number | null;
     packageEncryptionKey: string;
@@ -113,18 +113,20 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
         return existingJob;
       }
 
-      const target = await client.query<{ id: string }>(
-        `
-          SELECT id
-          FROM installations
-          WHERE id = $1
-            AND user_id = $2
-            AND client_type = 'figma_plugin'
-            AND status = 'active'
-        `,
-        [input.targetInstallationId, input.principal.userId]
-      );
-      if (!target.rows[0]) throw new ConversionJobError("TARGET_INSTALLATION_NOT_FOUND");
+      if (input.targetInstallationId) {
+        const target = await client.query<{ id: string }>(
+          `
+            SELECT id
+            FROM installations
+            WHERE id = $1
+              AND user_id = $2
+              AND client_type = 'figma_plugin'
+              AND status = 'active'
+          `,
+          [input.targetInstallationId, input.principal.userId]
+        );
+        if (!target.rows[0]) throw new ConversionJobError("TARGET_INSTALLATION_NOT_FOUND");
+      }
 
       const entitlementLock = await client.query<{
         plan: Plan;
@@ -331,7 +333,7 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
                package_encryption_key, package_encryption_algorithm, created_at
         FROM conversion_jobs
         WHERE user_id = $1
-          AND target_installation_id = $2
+          AND (target_installation_id IS NULL OR target_installation_id = $2)
           AND status = 'uploaded'
           AND expires_at > $3
         ORDER BY created_at ASC
@@ -346,10 +348,13 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
     const result = await this.#pool.query<JobRow>(
       `
         UPDATE conversion_jobs
-        SET status = 'claimed', claimed_at = $4, updated_at = $4
+        SET status = 'claimed',
+            target_installation_id = $3,
+            claimed_at = $4,
+            updated_at = $4
         WHERE id = $1
           AND user_id = $2
-          AND target_installation_id = $3
+          AND (target_installation_id IS NULL OR target_installation_id = $3)
           AND status = 'uploaded'
         RETURNING id, status, object_key, expires_at, target_installation_id,
                   scene_package_version, package_size_bytes::text, package_sha256,
@@ -485,6 +490,7 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
     try {
       await client.query("BEGIN");
       const installationColumn = role === "source" ? "source_installation_id" : "target_installation_id";
+      const installationPredicate = role === "source" ? `AND ${installationColumn} = $3` : "";
       const job = await client.query<JobRow>(
         `
           SELECT id, status, object_key, expires_at, target_installation_id,
@@ -493,13 +499,16 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
           FROM conversion_jobs
           WHERE id = $1
             AND user_id = $2
-            AND ${installationColumn} = $3
+            ${installationPredicate}
           FOR UPDATE
         `,
-        [jobId, principal.userId, principal.installationId]
+        role === "source" ? [jobId, principal.userId, principal.installationId] : [jobId, principal.userId]
       );
       const existing = job.rows[0];
       if (!existing) throw new ConversionJobError("JOB_NOT_FOUND");
+      if (role === "target" && existing.target_installation_id !== principal.installationId) {
+        throw new ConversionJobError("JOB_NOT_READY");
+      }
       if (
         ["imported", "import_failed", "cancelled", "capture_failed", "upload_expired", "expired"].includes(
           existing.status

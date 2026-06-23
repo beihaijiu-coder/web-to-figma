@@ -435,7 +435,7 @@
         <div class="actions" data-figma-capture-ignore="1">
           <button class="capture" id="figmaCaptureBtn" type="button" data-figma-capture-ignore="1">捕获当前网页</button>
           <button class="capture secondary" id="figmaSelectBtn" type="button" data-figma-capture-ignore="1">选择组件</button>
-          <button class="capture continue" id="figmaAccountBtn" type="button" data-figma-capture-ignore="1">账号与发送目标</button>
+          <button class="capture continue" id="figmaAccountBtn" type="button" data-figma-capture-ignore="1">账号与任务队列</button>
           <button class="capture stop-scroll hidden" id="figmaStopScrollBtn" type="button" data-figma-capture-ignore="1">停止滚动并生成</button>
           <button class="capture continue hidden" id="figmaContinueFlowBtn" type="button" data-figma-capture-ignore="1">继续采集下一段</button>
         </div>
@@ -867,7 +867,7 @@
           pendingCopyPayload = null;
           setContinueFlow(res.contentFlow || null);
           setCopyCard(false);
-          setStatus("已加密发送到目标 Figma 插件，请回到 Figma 领取导入。", "success");
+          setStatus("已加密上传到账号任务队列，请回到 Figma 插件领取导入。", "success");
           return;
         }
 

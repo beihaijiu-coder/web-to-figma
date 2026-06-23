@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   WebToFigmaApiError,
   claimConversionJob,
+  createConversionJob,
   createDeviceConnection,
   decryptSceneCapture,
   encryptSceneCapture,
@@ -153,6 +154,34 @@ test("cloud client lists Figma target installations for a connected device", asy
 
   assert.equal(calls[0].url, "https://api.example.com/v1/installations?clientType=figma_plugin");
   assert.deepEqual(result.installations, [{ id: "figma-installation", clientType: "figma_plugin" }]);
+});
+
+test("cloud client creates account queue jobs without requiring a Figma target", async () => {
+  const calls = [];
+  const result = await createConversionJob({
+    baseUrl: "https://api.example.com",
+    accessToken: "chrome-token",
+    idempotencyKey: "idempotent-account-queue-job",
+    packageEncryptionKey: "A".repeat(43),
+    fetchImpl: async (url, init) => {
+      calls.push({ url, init });
+      return jsonResponse(201, {
+        taskId: "task-1",
+        status: "upload_issued",
+        upload: { method: "PUT", url: "/v1/conversion-jobs/task-1/package" },
+      });
+    },
+  });
+
+  assert.equal(result.taskId, "task-1");
+  assert.equal(calls[0].url, "https://api.example.com/v1/conversion-jobs");
+  assert.equal(calls[0].init.method, "POST");
+  assert.equal(calls[0].init.headers.Authorization, "Bearer chrome-token");
+  assert.equal(calls[0].init.headers["Idempotency-Key"], "idempotent-account-queue-job");
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
+    scenePackageVersion: 1,
+    packageEncryptionKey: "A".repeat(43),
+  });
 });
 
 test("cloud client lists and claims only the selected Figma task", async () => {

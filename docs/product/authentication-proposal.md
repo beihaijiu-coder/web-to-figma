@@ -75,7 +75,7 @@ users
 
 ## Chrome 扩展连接方案
 
-**状态：** API、Chrome 扩展连接、目标 Figma 安装选择与加密上传已实现；真实 Clerk/Neon 联调等待本地密钥填写。
+**状态：** API、Chrome 扩展连接、账号任务队列与加密上传已实现；真实 Clerk/Neon 联调等待本地密钥填写。
 **目标：** 让桌面 Chrome 扩展取得与官网登录用户相同的 Web to Figma 身份与权益，但不在扩展中处理 Google 登录，也不向扩展发放 Clerk 会话凭证。
 
 这是一个由 Web to Figma API 管理的“浏览器辅助设备连接”流程，设计上参考 OAuth 2.0 Device Authorization Grant 的一次性设备码与轮询模型。
@@ -219,15 +219,16 @@ sequenceDiagram
 
 ## 转换任务、额度与短期中转
 
-**状态：** 本地端到端实现已完成，包括额度预占、AES-GCM 密文上传、指定安装领取、成功结算、失败/取消释放与过期回收。
-**目标：** 将当前 Chrome 扩展采集的场景包短期、加密地交给指定的 Figma 插件导入；Free 用户仅在一次完整导入成功后消耗周额度，Pro 用户不消耗周额度但仍受技术上限约束。
+**状态：** 本地端到端实现已完成，包括额度预占、AES-GCM 密文上传、账号任务队列、Figma 领取时锁定安装、成功结算、失败/取消释放与过期回收。
+**目标：** 将当前 Chrome 扩展采集的场景包短期、加密地放入同一用户的账号任务队列，再由已登录的 Figma 插件领取导入；Free 用户仅在一次完整导入成功后消耗周额度，Pro 用户不消耗周额度但仍受技术上限约束。
 
 本服务是短期加密任务中转，不承担网页转换的主要计算，也不作为长期网页内容仓库。Chrome 扩展负责采集与上传，Figma 插件负责下载与创建节点，API 只负责身份、权益、状态机、授权和清理编排。
 
 ### 核心原则
 
-- 一个任务必须指定一个 `target_installation_id`（目标 Figma 插件安装实例）。不能以“同一用户的任意 Figma 插件都可查询待导入任务”的方式分发，否则多设备会串单，也无法为更强的端到端加密预留边界。
-- Figma 插件先注册一个短期导入通道，Chrome 扩展创建任务时带上该目标 installation。API 同时验证 Chrome installation、目标 Figma installation 与内部用户之间的归属关系。
+- 首发默认采用“账号任务队列”：Chrome 扩展创建任务时可以不指定 `target_installation_id`，任务先归属当前内部用户；Figma 插件登录后查询同一用户未领取的已上传任务。
+- Figma 插件领取任务时，API 必须在同一事务中把空的 `target_installation_id` 写成当前 Figma installation；领取之后只有该 installation 能下载、完成、失败或取消该任务，避免多设备串单。
+- 仍保留可选的定向投递能力：如果 Chrome 扩展显式传入 `target_installation_id`，API 继续验证目标 Figma installation 与内部用户之间的归属关系。
 - Free 的额度在建任务时预占，在完整导入成功时结算；预占不等于已消耗。取消、采集失败、上传过期、无人领取或导入失败必须原子释放预占。
 - Pro 不按任务扣除周额度，但仍须执行并发任务数、场景包体积、任务时长和防滥用等技术上限。
 - 同一任务只允许一个 Figma installation 成功领取和导入；所有创建、领取、完成、失败和取消请求都必须具备幂等处理。
@@ -241,13 +242,10 @@ sequenceDiagram
     participant A as API
     participant D as Neon
     participant S as 临时对象存储
-    participant P as 目标 Figma 插件
-
-    U->>P: 发起导入或注册短期导入通道
-    P->>A: 注册 target_installation_id
+    participant P as Figma 插件
 
     U->>E: 点击转换
-    E->>A: 创建任务（idempotency_key + target_installation_id）
+    E->>A: 创建账号任务（idempotency_key）
     A->>A: 验证 Chrome installation 身份
     A->>D: 原子校验权益、预占 Free 额度
 
@@ -260,8 +258,11 @@ sequenceDiagram
         A-->>E: QUOTA_EXCEEDED
     end
 
-    P->>A: 领取目标 task_id
-    A->>D: 验证 target installation、用户与任务状态
+    U->>P: 登录或打开 Figma 插件
+    P->>A: 查询同账号待导入任务
+    A-->>P: 已上传、未领取的任务列表
+    P->>A: 领取 task_id
+    A->>D: 原子绑定 target_installation_id 并验证任务状态
     A-->>P: 单次下载授权
     P->>S: 下载密文
     P->>P: 解密并创建 Figma 节点
@@ -307,7 +308,7 @@ conversion_jobs
   id
   user_id
   source_installation_id
-  target_installation_id
+  target_installation_id（可为空；领取时绑定）
   status
   idempotency_key
   object_key
@@ -335,6 +336,8 @@ usage_events
 ```
 
 - 创建任务时，在一个数据库事务内验证套餐状态、计算该产品周已结算和已预占的 Free 额度，并写入 `quota_reservations(status=reserved)`；同一 `user_id + idempotency_key` 重试返回原任务。
+- 查询待导入任务时，Figma 插件只能看到同一用户下 `status=uploaded` 且 `target_installation_id IS NULL OR target_installation_id = 当前 installation` 的任务。
+- 领取任务时，必须以原子 `UPDATE` 把未领取任务绑定到当前 Figma installation；绑定后的任务不能被其他 Figma installation 领取。
 - 完成导入时，在一个事务内锁定任务和 reservation，将任务设为 `imported`、reservation 设为 `settled`，并创建唯一的 `usage_events` 记录。
 - 失败、取消或过期时，在一个事务内将仍为 `reserved` 的 reservation 设为 `released`。终态重复请求不得改变结果。
 - 需要为用户设定有限的未完成任务上限，避免 Free 用户通过大量 pending 任务长期占住额度；过期任务由后台作业回收。
@@ -358,7 +361,7 @@ usage_events
 1. 官网 Google 登录、Session JWT、`GET /v1/me` 与内部用户 upsert。**官网 `/account/` 与 API 已接入，真实 Clerk 联调待密钥填写。**
 2. Neon 中的套餐与免费周额度数据模型、服务端权益检查。**迁移与本地测试已实现。**
 3. Chrome 扩展与 Figma 插件接入统一身份。**设备连接、批准、轮询、安装绑定、Access/Refresh Token 轮换已在 API 层实现；Chrome 扩展 popup、Figma 插件 UI 与官网 `/connect/device/` 开发连接入口已接入。**
-4. 转换任务与短期中转。**Chrome 加密上传、指定 Figma 安装领取解密、导入终态结算、取消清理和过期回收已形成本地端到端实现。**
+4. 转换任务与短期中转。**Chrome 加密上传、账号任务队列、Figma 领取时锁定安装、解密导入、终态结算、取消清理和过期回收已形成本地端到端实现。**
 5. Clerk webhook：处理用户删除及必要的身份同步。
 6. 支付与 Pro 权益 webhook。
 

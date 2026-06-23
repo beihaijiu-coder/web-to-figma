@@ -48,7 +48,7 @@ const refreshTokenSchema = z.object({
 });
 
 const createConversionJobSchema = z.object({
-  targetInstallationId: z.string().uuid(),
+  targetInstallationId: z.string().uuid().nullable().optional(),
   scenePackageVersion: z.number().int().min(1).max(100).optional(),
   packageEncryptionKey: z
     .string()
@@ -350,7 +350,7 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
       try {
         const job = await conversionJobs.createUploadJob({
           principal,
-          targetInstallationId: parsed.data.targetInstallationId,
+          targetInstallationId: parsed.data.targetInstallationId ?? null,
           idempotencyKey: idempotencyKey.trim(),
           scenePackageVersion: parsed.data.scenePackageVersion ?? null,
           packageEncryptionKey: parsed.data.packageEncryptionKey,

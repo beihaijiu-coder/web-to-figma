@@ -53,22 +53,22 @@ curl http://127.0.0.1:8787/health
 - `POST /v1/tokens/refresh` — rotate a Refresh Token; reuse detection revokes the token family and active installation access.
 - `GET /v1/device/me` — extension/plugin token reads its own installation identity.
 - `DELETE /v1/device/me` — revoke the calling extension/plugin installation and all of its tokens.
-- `GET /v1/installations?clientType=figma_plugin` — extension/plugin token lists active installations for the same internal user, used by Chrome to find a target Figma plugin.
+- `GET /v1/installations?clientType=figma_plugin` — extension/plugin token lists active installations for the same internal user. Chrome may use this for optional direct targeting, but the default handoff uses the account task queue.
 - `GET /v1/me/installations` and `DELETE /v1/me/installations/:installationId` — website session lists and revokes the user’s client installations.
 
 ### Conversion handoff
 
-- `POST /v1/conversion-jobs` — Chrome-extension token creates a task with an `Idempotency-Key` and reserves Free quota when needed.
+- `POST /v1/conversion-jobs` — Chrome-extension token creates an account-queue task with an `Idempotency-Key` and reserves Free quota when needed. `targetInstallationId` is optional for direct targeting.
 - `PUT /v1/conversion-jobs/:jobId/package` — Chrome-extension token uploads the encrypted scene package to the local development package store.
 - `POST /v1/conversion-jobs/:jobId/capture-failed` — Chrome-extension token releases a reservation when encryption or upload cannot complete.
-- `GET /v1/conversion-jobs/pending` — Figma-plugin token lists uploaded tasks assigned to that installation.
-- `POST /v1/conversion-jobs/:jobId/claim` — Figma-plugin token claims a task and receives the package download URL.
+- `GET /v1/conversion-jobs/pending` — Figma-plugin token lists uploaded tasks for the same account that are either unclaimed or already assigned to that installation.
+- `POST /v1/conversion-jobs/:jobId/claim` — Figma-plugin token claims a task, atomically binds unclaimed account-queue tasks to that installation, and receives the package download URL.
 - `GET /v1/conversion-jobs/:jobId/package` — Figma-plugin token downloads the encrypted package.
 - `POST /v1/conversion-jobs/:jobId/imported` — Figma-plugin token marks success; Free reservation is settled into one usage event and the local package is deleted.
 - `POST /v1/conversion-jobs/:jobId/failed` — Figma-plugin token marks failure; Free reservation is released and the local package is deleted.
 - `POST /v1/conversion-jobs/:jobId/cancelled` — Figma-plugin token records cancellation after partial Figma nodes have been removed.
 
-Chrome removes credentials, browser-session fields, and URL query parameters from the cloud scene package, then encrypts the scene JSON with AES-256-GCM before upload. The temporary object contains only ciphertext; the API stores the task key separately and returns it only after the assigned Figma installation atomically claims that task. This is server-orchestrated encrypted storage, not a claim that the API itself can never decrypt the scene. Package SHA-256 is checked before decryption. Successful object deletion is recorded so the cleanup worker retries only packages whose deletion has not yet succeeded; deletion failure never reverses an already-settled task.
+Chrome removes credentials, browser-session fields, and URL query parameters from the cloud scene package, then encrypts the scene JSON with AES-256-GCM before upload. The temporary object contains only ciphertext; the API stores the task key separately and returns it only after a Figma installation for the same account atomically claims that task. This is server-orchestrated encrypted storage, not a claim that the API itself can never decrypt the scene. Package SHA-256 is checked before decryption. Successful object deletion is recorded so the cleanup worker retries only packages whose deletion has not yet succeeded; deletion failure never reverses an already-settled task.
 
 The current package storage is a local development adapter under `.data/packages`, ignored by Git. A minute-based maintenance job expires abandoned tasks, releases reservations, and removes terminal package files. Production should replace this adapter with short-lived object-storage upload/download authorizations plus a storage lifecycle TTL.
 

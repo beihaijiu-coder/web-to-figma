@@ -26,7 +26,7 @@ export type ConversionJobSummary = {
   status: ConversionJobStatus;
   objectKey: string;
   expiresAt: string;
-  targetInstallationId: string;
+  targetInstallationId: string | null;
   scenePackageVersion: number | null;
   packageSizeBytes: number | null;
   packageSha256: string | null;
@@ -61,7 +61,7 @@ export class ConversionJobError extends Error {
 export interface ConversionJobRepository {
   createUploadJob(input: {
     principal: DevicePrincipal;
-    targetInstallationId: string;
+    targetInstallationId: string | null;
     idempotencyKey: string;
     scenePackageVersion: number | null;
     packageEncryptionKey: string;

@@ -18,6 +18,10 @@ test("Chrome extension is packaged for clipboard handoff instead of JSON downloa
     new URL("../../chrome-extension/popup/popup.js", import.meta.url),
     "utf8"
   );
+  const popupHtml = fs.readFileSync(
+    new URL("../../chrome-extension/popup/popup.html", import.meta.url),
+    "utf8"
+  );
 
   assert.equal(manifest.permissions.includes("downloads"), false);
   assert.equal(manifest.permissions.includes("clipboardWrite"), true);
@@ -48,8 +52,13 @@ test("Chrome extension is packaged for clipboard handoff instead of JSON downloa
   assert.equal(toolbar.includes("copyCanvasSvgForFigma"), true);
   assert.equal(toolbar.includes("image/svg+xml"), true);
   assert.equal(toolbar.includes("copyPayloadForFigma(pendingCopyPayload)"), true);
+  assert.equal(toolbar.includes("账号任务队列"), true);
   assert.equal(popup.includes("new URLSearchParams(window.location.search).get(\"sourceTabId\")"), true);
   assert.equal(popup.includes("sourceTabId:"), true);
+  assert.equal(background.includes("submitCaptureToCloud(payload, msg.targetInstallationId || null)"), true);
+  assert.equal(popup.includes("账号任务队列"), true);
+  assert.equal(popupHtml.includes("发送方式"), true);
+  assert.equal(popupHtml.includes("账号任务队列（推荐）"), true);
 });
 
 test("Figma plugin UI stays focused on import progress without commercial/report panels", () => {
