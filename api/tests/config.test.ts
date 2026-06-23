@@ -14,6 +14,12 @@ const baseEnvironment = {
   CORS_ALLOWED_ORIGINS: "http://localhost:4173, https://app.example.com, null, chrome-extension://*",
   CLERK_AUDIENCE: "web-to-figma-web",
   PUBLIC_WEB_URL: "http://localhost:4173",
+  R2_ACCOUNT_ID: "test-account-id",
+  R2_ACCESS_KEY_ID: "test-access-key-id",
+  R2_SECRET_ACCESS_KEY: "test-secret-access-key",
+  R2_BUCKET_NAME: "web-to-figma-test",
+  R2_ENDPOINT: "https://test-account-id.r2.cloudflarestorage.com",
+  R2_REGION: "auto",
 };
 
 test("configuration parses origin lists and optional audience", () => {
@@ -31,12 +37,20 @@ test("configuration parses origin lists and optional audience", () => {
   ]);
   assert.deepEqual(config.clerk.audience, ["web-to-figma-web"]);
   assert.equal(config.device.connectionTtlSeconds, 600);
+  assert.equal(config.r2.bucketName, "web-to-figma-test");
 });
 
 test("configuration rejects missing secrets before the server starts", () => {
   assert.throws(
     () => createConfig({ ...baseEnvironment, CLERK_SECRET_KEY: "" }),
     (error) => error instanceof ConfigurationError && error.issues.some((issue) => issue.includes("CLERK_SECRET_KEY"))
+  );
+});
+
+test("configuration rejects missing R2 credentials before the server starts", () => {
+  assert.throws(
+    () => createConfig({ ...baseEnvironment, R2_SECRET_ACCESS_KEY: "" }),
+    (error) => error instanceof ConfigurationError && error.issues.some((issue) => issue.includes("R2_SECRET_ACCESS_KEY"))
   );
 });
 

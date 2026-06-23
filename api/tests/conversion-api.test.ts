@@ -11,6 +11,7 @@ import { PostgresConversionJobRepository } from "../src/db/conversion-jobs.js";
 import { PostgresDeviceConnectionRepository } from "../src/db/device-connections.js";
 import { PostgresCurrentUserRepository } from "../src/db/postgres.js";
 import { DeviceConnectionService } from "../src/device/device-connection.js";
+import type { PreviewContentType, PreviewStorage } from "../src/conversions/conversion-jobs.js";
 import { LocalPackageStorage } from "../src/storage/local-package-storage.js";
 import { migratedPglite, pglitePool, testConfig } from "./helpers.js";
 
@@ -36,6 +37,26 @@ const packagePayload = {
     children: [{ type: "text", text: "Hello from encrypted cloud package" }],
   },
 };
+
+class MemoryPreviewStorage implements PreviewStorage {
+  readonly objects = new Map<string, { body: Buffer; contentType: PreviewContentType }>();
+  writeCount = 0;
+
+  async write(objectKey: string, body: Buffer, contentType: PreviewContentType): Promise<void> {
+    this.writeCount += 1;
+    this.objects.set(objectKey, { body: Buffer.from(body), contentType });
+  }
+
+  async read(objectKey: string): Promise<{ body: Buffer; contentType: PreviewContentType }> {
+    const object = this.objects.get(objectKey);
+    if (!object) throw new Error("Preview object not found");
+    return { body: Buffer.from(object.body), contentType: object.contentType };
+  }
+
+  async remove(objectKey: string): Promise<void> {
+    this.objects.delete(objectKey);
+  }
+}
 
 function createEncryptedScenePackage(payload: unknown, keyValue = packageEncryptionKey): Buffer {
   const magic = Buffer.from([0x57, 0x32, 0x46, 0x31]);
@@ -87,6 +108,7 @@ test("Chrome uploads an account queue task that a later Figma connection can cla
       packageStorageDir: await mkdtemp(join(tmpdir(), "web-to-figma-packages-")),
     },
   };
+  const previewStorage = new MemoryPreviewStorage();
   const api = await createApi({
     config,
     authenticator,
@@ -94,6 +116,7 @@ test("Chrome uploads an account queue task that a later Figma connection can cla
     deviceConnections: new DeviceConnectionService(new PostgresDeviceConnectionRepository(pool), config),
     conversionJobs: new PostgresConversionJobRepository(pool),
     packageStorage: new LocalPackageStorage(config.conversions.packageStorageDir),
+    previewStorage,
   });
 
   const chrome = await connectInstallation(api, "chrome_extension");
@@ -110,6 +133,23 @@ test("Chrome uploads an account queue task that a later Figma connection can cla
   assert.equal(createJob.statusCode, 201);
   const taskId = createJob.json().taskId as string;
 
+  const storedPreviewMetadata = await pool.query<{
+    preview_image_data_url: string | null;
+    preview_object_key: string | null;
+  }>(
+    "select preview_image_data_url, preview_object_key from conversion_jobs where id = $1",
+    [taskId]
+  );
+  assert.equal(
+    storedPreviewMetadata.rows[0]?.preview_image_data_url,
+    null,
+    "thumbnail bytes must not be stored in Neon"
+  );
+  const previewObjectKey = storedPreviewMetadata.rows[0]?.preview_object_key;
+  assert.equal(previewObjectKey, `conversion-jobs/${taskId}/preview.jpg`);
+  assert.deepEqual(previewStorage.objects.get(previewObjectKey!)?.body, Buffer.from("AAAA", "base64"));
+  assert.equal(previewStorage.writeCount, 1);
+
   const duplicateCreate = await api.inject({
     method: "POST",
     url: "/v1/conversion-jobs",
@@ -121,6 +161,7 @@ test("Chrome uploads an account queue task that a later Figma connection can cla
   });
   assert.equal(duplicateCreate.statusCode, 201);
   assert.equal(duplicateCreate.json().taskId, taskId);
+  assert.equal(previewStorage.writeCount, 1);
 
   const encryptedPackage = createEncryptedScenePackage(packagePayload);
   const upload = await api.inject({
@@ -361,6 +402,7 @@ test("cloud capture storage keeps the newest ten uploaded webpages", async () =>
       packageStorageDir: await mkdtemp(join(tmpdir(), "web-to-figma-packages-")),
     },
   };
+  const previewStorage = new MemoryPreviewStorage();
   const api = await createApi({
     config,
     authenticator,
@@ -368,6 +410,7 @@ test("cloud capture storage keeps the newest ten uploaded webpages", async () =>
     deviceConnections: new DeviceConnectionService(new PostgresDeviceConnectionRepository(pool), config),
     conversionJobs: new PostgresConversionJobRepository(pool),
     packageStorage: new LocalPackageStorage(config.conversions.packageStorageDir),
+    previewStorage,
   });
 
   const chrome = await connectInstallation(api, "chrome_extension");
@@ -419,12 +462,20 @@ test("cloud capture storage keeps the newest ten uploaded webpages", async () =>
     assert.equal(upload.statusCode, 200);
   }
 
-  const oldest = await pool.query<{ status: string; package_deleted_at: Date | string | null }>(
-    "select status, package_deleted_at from conversion_jobs where id = $1",
+  const oldest = await pool.query<{
+    status: string;
+    package_deleted_at: Date | string | null;
+    preview_object_key: string | null;
+    preview_deleted_at: Date | string | null;
+  }>(
+    "select status, package_deleted_at, preview_object_key, preview_deleted_at from conversion_jobs where id = $1",
     [taskIds[0]]
   );
   assert.equal(oldest.rows[0]?.status, "expired");
   assert.ok(oldest.rows[0]?.package_deleted_at);
+  assert.ok(oldest.rows[0]?.preview_deleted_at);
+  assert.equal(previewStorage.objects.has(oldest.rows[0]!.preview_object_key!), false);
+  assert.equal(previewStorage.objects.size, 10);
 
   const figma = await connectInstallation(api, "figma_plugin");
   const pending = await api.inject({

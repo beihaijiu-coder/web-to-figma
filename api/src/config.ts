@@ -28,7 +28,18 @@ const environmentSchema = z.object({
   MAX_SCENE_PACKAGE_BYTES: z.coerce.number().int().min(1_024).max(104_857_600).default(26_214_400),
   MAX_ACTIVE_CONVERSION_JOBS: z.coerce.number().int().min(1).max(20).default(3),
   MAX_STORED_CAPTURE_JOBS: z.coerce.number().int().min(1).max(100).default(10),
+  MAX_PREVIEW_IMAGE_BYTES: z.coerce.number().int().min(1_024).max(1_048_576).default(350_000),
   PACKAGE_STORAGE_DIR: z.string().min(1).default(".data/packages"),
+  R2_ACCOUNT_ID: z.string().min(1, "R2_ACCOUNT_ID is required"),
+  R2_ACCESS_KEY_ID: z.string().min(1, "R2_ACCESS_KEY_ID is required"),
+  R2_SECRET_ACCESS_KEY: z.string().min(1, "R2_SECRET_ACCESS_KEY is required"),
+  R2_BUCKET_NAME: z
+    .string()
+    .min(3, "R2_BUCKET_NAME is required")
+    .max(63)
+    .regex(/^[a-z0-9][a-z0-9-]*[a-z0-9]$/, "R2_BUCKET_NAME must be a valid bucket name"),
+  R2_ENDPOINT: z.string().url("R2_ENDPOINT must be a valid URL"),
+  R2_REGION: z.string().min(1).default("auto"),
 });
 
 export type ApiConfig = {
@@ -55,7 +66,16 @@ export type ApiConfig = {
     maxScenePackageBytes: number;
     maxActiveJobs: number;
     maxStoredCaptures: number;
+    maxPreviewImageBytes: number;
     packageStorageDir: string;
+  };
+  r2: {
+    accountId: string;
+    accessKeyId: string;
+    secretAccessKey: string;
+    bucketName: string;
+    endpoint: string;
+    region: string;
   };
 };
 
@@ -197,7 +217,16 @@ export function createConfig(environment: NodeJS.ProcessEnv = process.env): ApiC
       maxScenePackageBytes: parsed.data.MAX_SCENE_PACKAGE_BYTES,
       maxActiveJobs: parsed.data.MAX_ACTIVE_CONVERSION_JOBS,
       maxStoredCaptures: parsed.data.MAX_STORED_CAPTURE_JOBS,
+      maxPreviewImageBytes: parsed.data.MAX_PREVIEW_IMAGE_BYTES,
       packageStorageDir: parsed.data.PACKAGE_STORAGE_DIR,
+    },
+    r2: {
+      accountId: parsed.data.R2_ACCOUNT_ID,
+      accessKeyId: parsed.data.R2_ACCESS_KEY_ID,
+      secretAccessKey: parsed.data.R2_SECRET_ACCESS_KEY,
+      bucketName: parsed.data.R2_BUCKET_NAME,
+      endpoint: parsed.data.R2_ENDPOINT,
+      region: parsed.data.R2_REGION,
     },
   };
 }

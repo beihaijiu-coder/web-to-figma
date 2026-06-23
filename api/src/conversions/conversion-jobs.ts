@@ -29,6 +29,7 @@ export type ConversionJobSummary = {
   targetInstallationId: string | null;
   sourceUrl: string | null;
   sourceTitle: string | null;
+  previewObjectKey: string | null;
   previewImageDataUrl: string | null;
   scenePackageVersion: number | null;
   packageSizeBytes: number | null;
@@ -67,13 +68,18 @@ export interface ConversionJobRepository {
     targetInstallationId: string | null;
     sourceUrl: string | null;
     sourceTitle: string | null;
-    previewImageDataUrl: string | null;
     idempotencyKey: string;
     scenePackageVersion: number | null;
     packageEncryptionKey: string;
     now: Date;
     ttlSeconds: number;
     maxActiveJobs: number;
+  }): Promise<ConversionJobSummary>;
+  attachPreviewObject(input: {
+    principal: DevicePrincipal;
+    jobId: string;
+    previewObjectKey: string;
+    now: Date;
   }): Promise<ConversionJobSummary>;
   markUploadComplete(input: {
     principal: DevicePrincipal;
@@ -103,12 +109,13 @@ export interface ConversionJobRepository {
     now: Date;
   }): Promise<ConversionJobSummary>;
   markPackageRemoved(input: { objectKey: string; now: Date }): Promise<void>;
-  storedPackageObjectKeysBeyondLimit(input: {
+  markPreviewRemoved(input: { previewObjectKey: string; now: Date }): Promise<void>;
+  storedObjectsBeyondLimit(input: {
     principal: DevicePrincipal;
     maxStoredCaptures: number;
     now: Date;
-  }): Promise<string[]>;
-  expireStale(now: Date): Promise<string[]>;
+  }): Promise<StoredConversionObjects[]>;
+  expireStale(now: Date): Promise<StoredConversionObjects[]>;
 }
 
 export type PackageStorage = {
@@ -117,8 +124,26 @@ export type PackageStorage = {
   remove(objectKey: string): Promise<void>;
 };
 
+export type PreviewContentType = "image/jpeg" | "image/png" | "image/webp";
+
+export type PreviewStorage = {
+  write(objectKey: string, body: Buffer, contentType: PreviewContentType): Promise<void>;
+  read(objectKey: string): Promise<{ body: Buffer; contentType: PreviewContentType }>;
+  remove(objectKey: string): Promise<void>;
+};
+
+export type StoredConversionObjects = {
+  packageObjectKey: string;
+  previewObjectKey: string | null;
+};
+
 export function newConversionObjectKey(jobId = randomUUID()): { jobId: string; objectKey: string } {
   return { jobId, objectKey: `conversion-jobs/${jobId}/scene-package.w2f` };
+}
+
+export function newPreviewObjectKey(jobId: string, contentType: PreviewContentType): string {
+  const extension = contentType === "image/png" ? "png" : contentType === "image/webp" ? "webp" : "jpg";
+  return `conversion-jobs/${jobId}/preview.${extension}`;
 }
 
 export function freeQuotaRemaining(input: { plan: Plan; used: number; reserved: number }): number | null {

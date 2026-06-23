@@ -6,6 +6,7 @@ import { PostgresConversionJobRepository } from "./db/conversion-jobs.js";
 import { createPostgresPool, PostgresCurrentUserRepository } from "./db/postgres.js";
 import { DeviceConnectionService } from "./device/device-connection.js";
 import { LocalPackageStorage } from "./storage/local-package-storage.js";
+import { R2PreviewStorage } from "./storage/r2-preview-storage.js";
 
 loadLocalEnvironment();
 
@@ -13,6 +14,7 @@ const config = createConfig();
 const pool = createPostgresPool(config.databaseUrl);
 const conversionJobs = new PostgresConversionJobRepository(pool);
 const packageStorage = new LocalPackageStorage(config.conversions.packageStorageDir);
+const previewStorage = new R2PreviewStorage(config.r2);
 const api = await createApi({
   config,
   authenticator: new ClerkAuthenticator(config.clerk),
@@ -20,6 +22,7 @@ const api = await createApi({
   deviceConnections: new DeviceConnectionService(new PostgresDeviceConnectionRepository(pool), config),
   conversionJobs,
   packageStorage,
+  previewStorage,
   logger: {
     level: config.environment === "production" ? "info" : "debug",
     redact: ["req.headers.authorization", "request.headers.authorization"],
@@ -31,15 +34,28 @@ let cleanupTimer: NodeJS.Timeout | null = null;
 
 async function cleanupExpiredConversions(): Promise<void> {
   try {
-    const objectKeys = await conversionJobs.expireStale(new Date());
+    const objects = await conversionJobs.expireStale(new Date());
     await Promise.all(
-      objectKeys.map(async (objectKey) => {
-        try {
-          await packageStorage.remove(objectKey);
-          await conversionJobs.markPackageRemoved({ objectKey, now: new Date() });
-        } catch (error) {
-          api.log.warn({ err: error }, "conversion package cleanup deferred");
-        }
+      objects.map(async ({ packageObjectKey, previewObjectKey }) => {
+        await Promise.all([
+          (async () => {
+            try {
+              await packageStorage.remove(packageObjectKey);
+              await conversionJobs.markPackageRemoved({ objectKey: packageObjectKey, now: new Date() });
+            } catch (error) {
+              api.log.warn({ err: error }, "conversion package cleanup deferred");
+            }
+          })(),
+          (async () => {
+            if (!previewObjectKey) return;
+            try {
+              await previewStorage.remove(previewObjectKey);
+              await conversionJobs.markPreviewRemoved({ previewObjectKey, now: new Date() });
+            } catch (error) {
+              api.log.warn({ err: error }, "conversion preview cleanup deferred");
+            }
+          })(),
+        ]);
       })
     );
   } catch (error) {

@@ -21,6 +21,7 @@ type JobRow = {
   target_installation_id: string | null;
   source_url: string | null;
   source_title: string | null;
+  preview_object_key: string | null;
   preview_image_data_url: string | null;
   scene_package_version: number | null;
   package_size_bytes: string | null;
@@ -49,6 +50,7 @@ function jobSummary(row: JobRow): ConversionJobSummary {
     targetInstallationId: row.target_installation_id,
     sourceUrl: row.source_url,
     sourceTitle: row.source_title,
+    previewObjectKey: row.preview_object_key,
     previewImageDataUrl: row.preview_image_data_url,
     scenePackageVersion: row.scene_package_version,
     packageSizeBytes: row.package_size_bytes === null ? null : Number(row.package_size_bytes),
@@ -63,7 +65,7 @@ async function selectJob(client: pg.PoolClient, jobId: string): Promise<Conversi
   const result = await client.query<JobRow>(
     `
       SELECT id, status, object_key, expires_at, target_installation_id,
-             source_url, source_title, preview_image_data_url,
+             source_url, source_title, preview_object_key, preview_image_data_url,
              scene_package_version, package_size_bytes::text, package_sha256,
              package_encryption_key, package_encryption_algorithm, created_at
       FROM conversion_jobs
@@ -86,7 +88,6 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
     targetInstallationId: string | null;
     sourceUrl: string | null;
     sourceTitle: string | null;
-    previewImageDataUrl: string | null;
     idempotencyKey: string;
     scenePackageVersion: number | null;
     packageEncryptionKey: string;
@@ -102,7 +103,7 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
       const existing = await client.query<JobRow>(
         `
           SELECT id, status, object_key, expires_at, target_installation_id,
-                 source_url, source_title, preview_image_data_url,
+                 source_url, source_title, preview_object_key, preview_image_data_url,
                  scene_package_version, package_size_bytes::text, package_sha256,
                  package_encryption_key, package_encryption_algorithm, created_at
           FROM conversion_jobs
@@ -235,7 +236,6 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
             target_installation_id,
             source_url,
             source_title,
-            preview_image_data_url,
             status,
             idempotency_key,
             object_key,
@@ -243,9 +243,9 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
             package_encryption_key,
             expires_at
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, 'upload_issued', $8, $9, $10, $11, $12)
+          VALUES ($1, $2, $3, $4, $5, $6, 'upload_issued', $7, $8, $9, $10, $11)
           RETURNING id, status, object_key, expires_at, target_installation_id,
-                    source_url, source_title, preview_image_data_url,
+                    source_url, source_title, preview_object_key, preview_image_data_url,
                     scene_package_version, package_size_bytes::text, package_sha256,
                     package_encryption_key, package_encryption_algorithm, created_at
         `,
@@ -256,7 +256,6 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
           input.targetInstallationId,
           input.sourceUrl,
           input.sourceTitle,
-          input.previewImageDataUrl,
           input.idempotencyKey,
           objectKey,
           input.scenePackageVersion,
@@ -280,6 +279,35 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
     }
   }
 
+  async attachPreviewObject(input: {
+    principal: DevicePrincipal;
+    jobId: string;
+    previewObjectKey: string;
+    now: Date;
+  }): Promise<ConversionJobSummary> {
+    const update = await this.#pool.query<JobRow>(
+      `
+        UPDATE conversion_jobs
+        SET preview_object_key = $4,
+            preview_image_data_url = NULL,
+            preview_deleted_at = NULL,
+            updated_at = $5
+        WHERE id = $1
+          AND user_id = $2
+          AND source_installation_id = $3
+          AND status = 'upload_issued'
+          AND (preview_object_key IS NULL OR preview_object_key = $4)
+        RETURNING id, status, object_key, expires_at, target_installation_id,
+                  source_url, source_title, preview_object_key, preview_image_data_url,
+                  scene_package_version, package_size_bytes::text, package_sha256,
+                  package_encryption_key, package_encryption_algorithm, created_at
+      `,
+      [input.jobId, input.principal.userId, input.principal.installationId, input.previewObjectKey, input.now]
+    );
+    if (!update.rows[0]) throw new ConversionJobError("JOB_NOT_READY");
+    return jobSummary(update.rows[0]);
+  }
+
   async markUploadComplete(input: {
     principal: DevicePrincipal;
     jobId: string;
@@ -299,7 +327,7 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
             AND source_installation_id = $3
             AND status = 'upload_issued'
           RETURNING id, status, object_key, expires_at, target_installation_id,
-                    source_url, source_title, preview_image_data_url,
+                    source_url, source_title, preview_object_key, preview_image_data_url,
                     scene_package_version, package_size_bytes::text, package_sha256,
                     package_encryption_key, package_encryption_algorithm, created_at
         `,
@@ -330,7 +358,7 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
     const result = await this.#pool.query<JobRow>(
       `
         SELECT id, status, object_key, expires_at, target_installation_id,
-               source_url, source_title, preview_image_data_url,
+               source_url, source_title, preview_object_key, preview_image_data_url,
                scene_package_version, package_size_bytes::text, package_sha256,
                package_encryption_key, package_encryption_algorithm, created_at
         FROM conversion_jobs
@@ -350,7 +378,7 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
     const result = await this.#pool.query<JobRow>(
       `
         SELECT id, status, object_key, expires_at, target_installation_id,
-               source_url, source_title, preview_image_data_url,
+               source_url, source_title, preview_object_key, preview_image_data_url,
                scene_package_version, package_size_bytes::text, package_sha256,
                package_encryption_key, package_encryption_algorithm, created_at
         FROM conversion_jobs
@@ -385,7 +413,7 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
           AND status = 'uploaded'
           AND expires_at > $4
         RETURNING id, status, object_key, expires_at, target_installation_id,
-                  source_url, source_title, preview_image_data_url,
+                  source_url, source_title, preview_object_key, preview_image_data_url,
                   scene_package_version, package_size_bytes::text, package_sha256,
                   package_encryption_key, package_encryption_algorithm, created_at
       `,
@@ -396,7 +424,7 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
     const existing = await this.#pool.query<JobRow>(
       `
         SELECT id, status, object_key, expires_at, target_installation_id,
-               source_url, source_title, preview_image_data_url,
+               source_url, source_title, preview_object_key, preview_image_data_url,
                scene_package_version, package_size_bytes::text, package_sha256,
                package_encryption_key, package_encryption_algorithm, created_at
         FROM conversion_jobs
@@ -426,7 +454,7 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
           AND package_deleted_at IS NULL
           AND expires_at > $4
         RETURNING id, status, object_key, expires_at, target_installation_id,
-                  source_url, source_title, preview_image_data_url,
+                  source_url, source_title, preview_object_key, preview_image_data_url,
                   scene_package_version, package_size_bytes::text, package_sha256,
                   package_encryption_key, package_encryption_algorithm, created_at
       `,
@@ -437,7 +465,7 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
     const imported = await this.#pool.query<JobRow>(
       `
         SELECT id, status, object_key, expires_at, target_installation_id,
-               source_url, source_title, preview_image_data_url,
+               source_url, source_title, preview_object_key, preview_image_data_url,
                scene_package_version, package_size_bytes::text, package_sha256,
                package_encryption_key, package_encryption_algorithm, created_at
         FROM conversion_jobs
@@ -484,19 +512,35 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
     );
   }
 
-  async storedPackageObjectKeysBeyondLimit(input: {
+  async markPreviewRemoved(input: { previewObjectKey: string; now: Date }): Promise<void> {
+    await this.#pool.query(
+      `
+        UPDATE conversion_jobs
+        SET preview_deleted_at = COALESCE(preview_deleted_at, $2), updated_at = $2
+        WHERE preview_object_key = $1
+      `,
+      [input.previewObjectKey, input.now]
+    );
+  }
+
+  async storedObjectsBeyondLimit(input: {
     principal: DevicePrincipal;
     maxStoredCaptures: number;
     now: Date;
-  }): Promise<string[]> {
+  }): Promise<Array<{ packageObjectKey: string; previewObjectKey: string | null }>> {
     const client = await this.#pool.connect();
     try {
       await client.query("BEGIN");
-      const pruned = await client.query<{ id: string; object_key: string; status: ConversionJobStatus }>(
+      const pruned = await client.query<{
+        id: string;
+        object_key: string;
+        preview_object_key: string | null;
+        status: ConversionJobStatus;
+      }>(
         `
-          SELECT id, object_key, status
+          SELECT id, object_key, preview_object_key, status
           FROM (
-            SELECT id, object_key, status,
+            SELECT id, object_key, preview_object_key, status,
                    row_number() OVER (ORDER BY created_at DESC, id DESC) AS stored_rank
             FROM conversion_jobs
             WHERE user_id = $1
@@ -540,7 +584,10 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
         [prunedIds, input.now]
       );
       await client.query("COMMIT");
-      return pruned.rows.map((row) => row.object_key);
+      return pruned.rows.map((row) => ({
+        packageObjectKey: row.object_key,
+        previewObjectKey: row.preview_object_key,
+      }));
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
@@ -549,7 +596,7 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
     }
   }
 
-  async expireStale(now: Date): Promise<string[]> {
+  async expireStale(now: Date): Promise<Array<{ packageObjectKey: string; previewObjectKey: string | null }>> {
     const client = await this.#pool.connect();
     try {
       await client.query("BEGIN");
@@ -573,19 +620,24 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
         `,
         [now]
       );
-      const objects = await client.query<{ object_key: string }>(
+      const objects = await client.query<{ object_key: string; preview_object_key: string | null }>(
         `
-          SELECT DISTINCT object_key
+          SELECT DISTINCT object_key, preview_object_key
           FROM conversion_jobs
-          WHERE object_key IS NOT NULL
-            AND package_deleted_at IS NULL
-            AND status IN ('cancelled', 'capture_failed', 'upload_expired', 'import_failed', 'expired')
+          WHERE status IN ('cancelled', 'capture_failed', 'upload_expired', 'import_failed', 'expired')
+            AND (
+              (object_key IS NOT NULL AND package_deleted_at IS NULL)
+              OR (preview_object_key IS NOT NULL AND preview_deleted_at IS NULL)
+            )
           ORDER BY object_key
           LIMIT 500
         `
       );
       await client.query("COMMIT");
-      return objects.rows.map((row) => row.object_key);
+      return objects.rows.map((row) => ({
+        packageObjectKey: row.object_key,
+        previewObjectKey: row.preview_object_key,
+      }));
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
@@ -609,7 +661,7 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
       const job = await client.query<JobRow>(
         `
           SELECT id, status, object_key, expires_at, target_installation_id,
-                 source_url, source_title, preview_image_data_url,
+                 source_url, source_title, preview_object_key, preview_image_data_url,
                  scene_package_version, package_size_bytes::text, package_sha256,
                  package_encryption_key, package_encryption_algorithm, created_at
           FROM conversion_jobs
@@ -649,7 +701,7 @@ export class PostgresConversionJobRepository implements ConversionJobRepository 
           SET status = $4, completed_at = $5, updated_at = $5
           WHERE id = $1 AND user_id = $2 AND ${installationColumn} = $3
           RETURNING id, status, object_key, expires_at, target_installation_id,
-                    source_url, source_title, preview_image_data_url,
+                    source_url, source_title, preview_object_key, preview_image_data_url,
                     scene_package_version, package_size_bytes::text, package_sha256,
                     package_encryption_key, package_encryption_algorithm, created_at
         `,

@@ -33,7 +33,16 @@ export function testConfig(): ApiConfig {
       maxScenePackageBytes: 26_214_400,
       maxActiveJobs: 3,
       maxStoredCaptures: 10,
+      maxPreviewImageBytes: 350_000,
       packageStorageDir: ".data/test-packages",
+    },
+    r2: {
+      accountId: "test-account-id",
+      accessKeyId: "test-access-key-id",
+      secretAccessKey: "test-secret-access-key",
+      bucketName: "web-to-figma-test",
+      endpoint: "https://test-account-id.r2.cloudflarestorage.com",
+      region: "auto",
     },
   };
 }

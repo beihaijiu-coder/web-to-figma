@@ -4,12 +4,18 @@ TypeScript API for Web to Figma identity, internal users, entitlements, weekly F
 
 ## First local setup
 
-`api/.env.local` is intentionally ignored by Git and has already been created as a blank local template. Fill in the three values you saved privately:
+`api/.env.local` is intentionally ignored by Git and has already been created as a blank local template. Fill in the Clerk, Neon, and private Cloudflare R2 values you saved privately:
 
 ```text
 CLERK_PUBLISHABLE_KEY=pk_test_...
 CLERK_SECRET_KEY=sk_test_...
 DATABASE_URL=postgresql://...
+R2_ACCOUNT_ID=...
+R2_ACCESS_KEY_ID=...
+R2_SECRET_ACCESS_KEY=...
+R2_BUCKET_NAME=web-to-figma-dev
+R2_ENDPOINT=https://....r2.cloudflarestorage.com
+R2_REGION=auto
 ```
 
 Do not paste these values into chat, source files, screenshots, or Git commits. `CLERK_AUTHORIZED_PARTIES` and `CORS_ALLOWED_ORIGINS` default to the local marketing-site origin, `http://localhost:4173`.
@@ -58,10 +64,10 @@ curl http://127.0.0.1:8787/health
 
 ### Conversion handoff
 
-- `POST /v1/conversion-jobs` — Chrome-extension token creates an account-queue task with an `Idempotency-Key` and reserves Free quota when needed. `targetInstallationId` is optional for direct targeting; `preview` may include the captured page title, URL, and thumbnail for the Figma task grid.
+- `POST /v1/conversion-jobs` — Chrome-extension token creates an account-queue task with an `Idempotency-Key` and reserves Free quota when needed. `targetInstallationId` is optional for direct targeting; `preview` may include the captured page title, URL, and thumbnail for the Figma task grid. Thumbnail bytes are stored in the private R2 bucket; Neon stores only the object key.
 - `PUT /v1/conversion-jobs/:jobId/package` — Chrome-extension token uploads the encrypted scene package to the local development package store.
 - `POST /v1/conversion-jobs/:jobId/capture-failed` — Chrome-extension token releases a reservation when encryption or upload cannot complete.
-- `GET /v1/conversion-jobs/pending` — Figma-plugin token lists the same account's stored cloud captures, including unimported tasks and imported captures that remain available for repeat import. The default retention limit is 10 stored captures per user.
+- `GET /v1/conversion-jobs/pending` — Figma-plugin token lists the same account's stored cloud captures, including unimported tasks and imported captures that remain available for repeat import. The API reads private thumbnails from R2 and returns them only to the authenticated Figma installation. The default retention limit is 10 stored captures per user.
 - `POST /v1/conversion-jobs/:jobId/claim` — Figma-plugin token claims a task, atomically binds unclaimed account-queue tasks to that installation, and receives both encrypted-binary and API-decoded package download URLs.
 - `GET /v1/conversion-jobs/:jobId/package` — Figma-plugin token downloads the encrypted package when the plugin UI can use WebCrypto locally.
 - `GET /v1/conversion-jobs/:jobId/package-json` — Figma-plugin token downloads the decrypted capture payload through the API compatibility path for Figma UI environments without WebCrypto.
@@ -71,7 +77,7 @@ curl http://127.0.0.1:8787/health
 
 Chrome removes credentials, browser-session fields, and URL query parameters from the cloud scene package, then encrypts the scene JSON with AES-256-GCM before upload. The temporary object contains only ciphertext; the API stores the task key separately and returns it only after a Figma installation for the same account atomically claims that task. This is server-orchestrated encrypted storage, not a claim that the API itself can never decrypt the scene. Package SHA-256 is checked before decryption. Successful object deletion is recorded so the cleanup worker retries only packages whose deletion has not yet succeeded; deletion failure never reverses an already-settled task.
 
-The current package storage is a local development adapter under `.data/packages`, ignored by Git. A minute-based maintenance job expires abandoned tasks, releases reservations, and removes terminal package files. Production should replace this adapter with short-lived object-storage upload/download authorizations plus a storage lifecycle TTL.
+The current encrypted scene-package storage is a local development adapter under `.data/packages`, ignored by Git. Capture thumbnails use the private R2 bucket and are removed alongside their task when it fails, expires, or falls beyond the user's newest ten captures. The R2 bucket does not need public access or browser CORS because only the API talks to it. A minute-based maintenance job expires abandoned tasks, releases reservations, and removes terminal package and preview objects. Production should also replace the local scene-package adapter with short-lived object-storage upload/download authorizations plus a storage lifecycle TTL.
 
 ## Production guardrails
 

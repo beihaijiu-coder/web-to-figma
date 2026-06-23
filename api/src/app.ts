@@ -9,8 +9,11 @@ import type { ApiConfig } from "./config.js";
 import {
   ConversionJobError,
   QuotaExceededError,
+  newPreviewObjectKey,
   type ConversionJobRepository,
   type PackageStorage,
+  type PreviewContentType,
+  type PreviewStorage,
 } from "./conversions/conversion-jobs.js";
 import { CLIENT_TYPES, type DeviceConnectionService } from "./device/device-connection.js";
 import type { DevicePrincipal } from "./device/device-connection.js";
@@ -23,6 +26,7 @@ export type ApiDependencies = {
   deviceConnections?: DeviceConnectionService;
   conversionJobs?: ConversionJobRepository;
   packageStorage?: PackageStorage;
+  previewStorage?: PreviewStorage;
   logger?: FastifyServerOptions["logger"];
 };
 
@@ -98,6 +102,26 @@ async function requireAnyDevicePrincipal(
 
 function sha256Hex(body: Buffer): string {
   return createHash("sha256").update(body).digest("hex");
+}
+
+function decodePreviewDataUrl(
+  dataUrl: string,
+  maxBytes: number
+): { body: Buffer; contentType: PreviewContentType } {
+  const match = dataUrl.match(/^data:(image\/(?:png|jpeg|jpg|webp));base64,([A-Za-z0-9+/]+={0,2})$/);
+  if (!match) throw new Error("Invalid preview image data URL");
+  const body = Buffer.from(match[2]!, "base64");
+  if (!body.length) throw new Error("Preview image is empty");
+  if (body.length > maxBytes) throw new Error("Preview image exceeds the configured limit");
+  const rawContentType = match[1]!;
+  return {
+    body,
+    contentType: rawContentType === "image/jpg" ? "image/jpeg" : (rawContentType as PreviewContentType),
+  };
+}
+
+function previewDataUrl(body: Buffer, contentType: PreviewContentType): string {
+  return `data:${contentType};base64,${body.toString("base64")}`;
 }
 
 const SCENE_PACKAGE_MAGIC = Buffer.from([0x57, 0x32, 0x46, 0x31]);
@@ -390,6 +414,7 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
   if (dependencies.deviceConnections && dependencies.conversionJobs && dependencies.packageStorage) {
     const conversionJobs = dependencies.conversionJobs;
     const packageStorage = dependencies.packageStorage;
+    const previewStorage = dependencies.previewStorage;
     async function removeStoredPackage(objectKey: string): Promise<void> {
       try {
         await packageStorage.remove(objectKey);
@@ -398,13 +423,31 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
         api.log.warn({ err: error }, "conversion package cleanup deferred");
       }
     }
+    async function removeStoredPreview(previewObjectKey: string | null): Promise<void> {
+      if (!previewObjectKey || !previewStorage) return;
+      try {
+        await previewStorage.remove(previewObjectKey);
+        await conversionJobs.markPreviewRemoved({ previewObjectKey, now: new Date() });
+      } catch (error) {
+        api.log.warn({ err: error }, "conversion preview cleanup deferred");
+      }
+    }
+    async function removeStoredObjects(objects: {
+      packageObjectKey: string;
+      previewObjectKey: string | null;
+    }): Promise<void> {
+      await Promise.all([
+        removeStoredPackage(objects.packageObjectKey),
+        removeStoredPreview(objects.previewObjectKey),
+      ]);
+    }
     async function pruneStoredCaptures(principal: DevicePrincipal): Promise<void> {
-      const objectKeys = await conversionJobs.storedPackageObjectKeysBeyondLimit({
+      const objects = await conversionJobs.storedObjectsBeyondLimit({
         principal,
         maxStoredCaptures: dependencies.config.conversions.maxStoredCaptures,
         now: new Date(),
       });
-      await Promise.all(objectKeys.map((objectKey) => removeStoredPackage(objectKey)));
+      await Promise.all(objects.map((storedObjects) => removeStoredObjects(storedObjects)));
     }
     const deviceAuth = dependencies.deviceConnections;
 
@@ -422,13 +465,29 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
         return reply.code(400).send(errorBody("INVALID_REQUEST", "Invalid conversion job request"));
       }
 
+      let decodedPreview: { body: Buffer; contentType: PreviewContentType } | null = null;
+      if (parsed.data.preview?.previewImageDataUrl) {
+        if (!previewStorage) {
+          return reply.code(503).send(errorBody("PREVIEW_STORAGE_UNAVAILABLE", "Thumbnail storage is unavailable"));
+        }
+        try {
+          decodedPreview = decodePreviewDataUrl(
+            parsed.data.preview.previewImageDataUrl,
+            dependencies.config.conversions.maxPreviewImageBytes
+          );
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Invalid preview image";
+          const status = message.includes("exceeds") ? 413 : 400;
+          return reply.code(status).send(errorBody("INVALID_PREVIEW_IMAGE", message));
+        }
+      }
+
       try {
-        const job = await conversionJobs.createUploadJob({
+        let job = await conversionJobs.createUploadJob({
           principal,
           targetInstallationId: parsed.data.targetInstallationId ?? null,
           sourceUrl: parsed.data.preview?.sourceUrl || null,
           sourceTitle: parsed.data.preview?.sourceTitle || null,
-          previewImageDataUrl: parsed.data.preview?.previewImageDataUrl || null,
           idempotencyKey: idempotencyKey.trim(),
           scenePackageVersion: parsed.data.scenePackageVersion ?? null,
           packageEncryptionKey: parsed.data.packageEncryptionKey,
@@ -436,6 +495,25 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
           ttlSeconds: dependencies.config.conversions.jobTtlSeconds,
           maxActiveJobs: dependencies.config.conversions.maxActiveJobs,
         });
+        if (decodedPreview && previewStorage && !job.previewObjectKey) {
+          const previewObjectKey = newPreviewObjectKey(job.id, decodedPreview.contentType);
+          try {
+            await previewStorage.write(previewObjectKey, decodedPreview.body, decodedPreview.contentType);
+            job = await conversionJobs.attachPreviewObject({
+              principal,
+              jobId: job.id,
+              previewObjectKey,
+              now: new Date(),
+            });
+          } catch (error) {
+            await previewStorage.remove(previewObjectKey).catch(() => undefined);
+            await conversionJobs.markSourceFailed({ principal, jobId: job.id, now: new Date() }).catch(() => undefined);
+            request.log.error({ err: error }, "thumbnail upload failed");
+            return reply
+              .code(503)
+              .send(errorBody("PREVIEW_STORAGE_UNAVAILABLE", "Thumbnail could not be stored"));
+          }
+        }
         return reply.code(201).send({
           taskId: job.id,
           status: job.status,
@@ -497,7 +575,10 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
           return reply.code(200).send({ taskId: job.id, status: job.status, packageSha256: job.packageSha256 });
         } catch (error) {
           await conversionJobs.markSourceFailed({ principal, jobId: uploadJob.id, now: new Date() }).catch(() => undefined);
-          await removeStoredPackage(uploadJob.objectKey);
+          await removeStoredObjects({
+            packageObjectKey: uploadJob.objectKey,
+            previewObjectKey: uploadJob.previewObjectKey,
+          });
           throw error;
         }
       } catch (error) {
@@ -515,7 +596,7 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
       if (!params.success) return reply.code(400).send(errorBody("INVALID_REQUEST", "Invalid task id"));
       try {
         const job = await conversionJobs.markSourceFailed({ principal, jobId: params.data.jobId, now: new Date() });
-        await removeStoredPackage(job.objectKey);
+        await removeStoredObjects({ packageObjectKey: job.objectKey, previewObjectKey: job.previewObjectKey });
         return reply.code(200).send({ taskId: job.id, status: job.status });
       } catch (error) {
         const mapped = mapConversionError(error);
@@ -528,19 +609,35 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
       const principal = await requireDevicePrincipal(deviceAuth, request.headers.authorization, "figma_plugin");
       if (!principal) return reply.code(401).send(errorBody("UNAUTHORIZED", "Figma plugin token required"));
       const jobs = await conversionJobs.listPendingForTarget({ principal, now: new Date() });
+      const responseJobs = await Promise.all(
+        jobs.map(async (job) => {
+          let imageDataUrl = job.previewImageDataUrl;
+          if (job.previewObjectKey && previewStorage) {
+            try {
+              const storedPreview = await previewStorage.read(job.previewObjectKey);
+              if (storedPreview.body.length <= dependencies.config.conversions.maxPreviewImageBytes) {
+                imageDataUrl = previewDataUrl(storedPreview.body, storedPreview.contentType);
+              }
+            } catch (error) {
+              request.log.warn({ err: error, jobId: job.id }, "thumbnail read failed");
+            }
+          }
+          return {
+            id: job.id,
+            status: job.status,
+            expiresAt: job.expiresAt,
+            sourceUrl: job.sourceUrl,
+            sourceTitle: job.sourceTitle,
+            previewImageDataUrl: imageDataUrl,
+            scenePackageVersion: job.scenePackageVersion,
+            packageSizeBytes: job.packageSizeBytes,
+            packageSha256: job.packageSha256,
+            createdAt: job.createdAt,
+          };
+        })
+      );
       return reply.code(200).send({
-        jobs: jobs.map((job) => ({
-          id: job.id,
-          status: job.status,
-          expiresAt: job.expiresAt,
-          sourceUrl: job.sourceUrl,
-          sourceTitle: job.sourceTitle,
-          previewImageDataUrl: job.previewImageDataUrl,
-          scenePackageVersion: job.scenePackageVersion,
-          packageSizeBytes: job.packageSizeBytes,
-          packageSha256: job.packageSha256,
-          createdAt: job.createdAt,
-        })),
+        jobs: responseJobs,
       });
     });
 
@@ -640,7 +737,9 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
           terminalStatus: "import_failed",
           now: new Date(),
         });
-        if (job.status === "import_failed") await removeStoredPackage(job.objectKey);
+        if (job.status === "import_failed") {
+          await removeStoredObjects({ packageObjectKey: job.objectKey, previewObjectKey: job.previewObjectKey });
+        }
         return reply.code(200).send({ taskId: job.id, status: job.status });
       } catch (error) {
         const mapped = mapConversionError(error);
@@ -661,7 +760,9 @@ export async function createApi(dependencies: ApiDependencies): Promise<FastifyI
           terminalStatus: "cancelled",
           now: new Date(),
         });
-        if (job.status === "cancelled") await removeStoredPackage(job.objectKey);
+        if (job.status === "cancelled") {
+          await removeStoredObjects({ packageObjectKey: job.objectKey, previewObjectKey: job.previewObjectKey });
+        }
         return reply.code(200).send({ taskId: job.id, status: job.status });
       } catch (error) {
         const mapped = mapConversionError(error);
