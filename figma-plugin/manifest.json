@@ -6,7 +6,9 @@
   "ui": "ui/index.html",
   "editorType": ["figma"],
   "networkAccess": {
-    "allowedDomains": ["none"],
+    "allowedDomains": [
+      "https://web-to-figmaapi-production.up.railway.app"
+    ],
     "devAllowedDomains": [
       "http://localhost:8787",
       "http://localhost:4173"

@@ -496,8 +496,8 @@
       </select>
       <input id="fallbackFont" class="field" placeholder="Fallback font, e.g. Inter" value="Inter" />
       <section class="account-panel" aria-label="Account connection">
-        <p class="account-title">Account connection · dev</p>
-        <input id="apiBaseUrl" class="field" placeholder="API URL" value="http://localhost:8787" />
+        <p class="account-title">Account connection</p>
+        <input id="apiBaseUrl" class="field" placeholder="API URL" value="https://web-to-figmaapi-production.up.railway.app" />
         <div class="button-row">
           <button id="connectAccountBtn" class="secondary" type="button">Connect account</button>
           <button id="disconnectAccountBtn" class="neutral" type="button">Disconnect</button>
@@ -562,6 +562,8 @@
     let pendingCloudJobs = [];
     let activeCloudTask = null;
     let storedCloudTask = null;
+    const defaultApiBaseUrl = "https://web-to-figmaapi-production.up.railway.app";
+    const legacyLocalApiOrigins = new Set(["http://localhost:8787", "http://127.0.0.1:8787"]);
 
     function postToMain(message) {
       parent.postMessage({ pluginMessage: message }, "*");
@@ -675,11 +677,16 @@
     }
 
     function normalizeApiBaseUrl(rawValue) {
-      const url = new URL(String(rawValue || "http://localhost:8787").trim());
+      const url = new URL(String(rawValue || defaultApiBaseUrl).trim());
       if (url.protocol !== "http:" && url.protocol !== "https:") {
         throw new Error("API URL must start with http:// or https://.");
       }
       return url.origin;
+    }
+
+    function migrateLegacyApiBaseUrl(rawValue) {
+      const normalized = normalizeApiBaseUrl(rawValue);
+      return legacyLocalApiOrigins.has(normalized) ? defaultApiBaseUrl : normalized;
     }
 
     async function apiJson(path, options = {}) {
@@ -804,8 +811,12 @@
 
     async function refreshDeviceAuth(auth) {
       if (!auth?.refreshToken || Number(auth.refreshTokenExpiresAt || 0) <= Date.now()) return false;
-      apiBaseUrl.value = auth.apiBaseUrl || apiBaseUrl.value;
-      deviceAuth = auth;
+      const migratedApiBaseUrl = migrateLegacyApiBaseUrl(auth.apiBaseUrl || apiBaseUrl.value);
+      apiBaseUrl.value = migratedApiBaseUrl;
+      deviceAuth = { ...auth, apiBaseUrl: migratedApiBaseUrl };
+      if (migratedApiBaseUrl !== auth.apiBaseUrl) {
+        postToMain({ type: "save-device-auth", ...deviceAuth });
+      }
       if (auth.accessToken && Number(auth.accessTokenExpiresAt || 0) > Date.now() + 30_000) {
         importCloudBtn.disabled = false;
         return true;

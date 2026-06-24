@@ -3,6 +3,8 @@ const CONCURRENCY_KEY = "proxyFetchConcurrency";
 const DEFAULT_CONCURRENCY = "8";
 const TARGET_INSTALLATION_KEY = "webToFigmaTargetInstallationId";
 const ALLOWED_CONCURRENCY = new Set(["4", "6", "8", "10", "12", "16", "20", "infinite"]);
+const DEFAULT_API_BASE_URL = "https://web-to-figmaapi-production.up.railway.app";
+const LEGACY_LOCAL_API_ORIGINS = new Set(["http://localhost:8787", "http://127.0.0.1:8787"]);
 
 const toggle = document.getElementById("assetProxyToggle");
 const concurrency = document.getElementById("proxyConcurrency");
@@ -34,6 +36,15 @@ function setCloudBusy(busy) {
   cloudBusy = busy;
   connectAccountBtn.disabled = busy;
   disconnectAccountBtn.disabled = busy;
+}
+
+function migratedApiBaseUrl(rawValue) {
+  try {
+    const origin = new URL(String(rawValue || DEFAULT_API_BASE_URL).trim()).origin;
+    return LEGACY_LOCAL_API_ORIGINS.has(origin) ? DEFAULT_API_BASE_URL : origin;
+  } catch {
+    return DEFAULT_API_BASE_URL;
+  }
 }
 
 function sendRuntimeMessage(message) {
@@ -115,13 +126,17 @@ chrome.storage.local.get(
   {
     [STORAGE_KEY]: false,
     [CONCURRENCY_KEY]: DEFAULT_CONCURRENCY,
-    webToFigmaApiBaseUrl: "http://localhost:8787",
+    webToFigmaApiBaseUrl: DEFAULT_API_BASE_URL,
     [TARGET_INSTALLATION_KEY]: "",
   },
   (res) => {
     toggle.checked = Boolean(res[STORAGE_KEY]);
     concurrency.value = normalizeConcurrency(res[CONCURRENCY_KEY]);
-    apiBaseUrl.value = res.webToFigmaApiBaseUrl || "http://localhost:8787";
+    const effectiveApiBaseUrl = migratedApiBaseUrl(res.webToFigmaApiBaseUrl);
+    apiBaseUrl.value = effectiveApiBaseUrl;
+    if (effectiveApiBaseUrl !== res.webToFigmaApiBaseUrl) {
+      chrome.storage.local.set({ webToFigmaApiBaseUrl: effectiveApiBaseUrl });
+    }
     figmaTarget.value = res[TARGET_INSTALLATION_KEY] || "";
     refreshCloudStatus();
   }

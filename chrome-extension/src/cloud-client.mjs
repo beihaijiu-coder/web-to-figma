@@ -1,5 +1,10 @@
-export const DEFAULT_API_BASE_URL = "http://localhost:8787";
+export const DEFAULT_API_BASE_URL = "https://web-to-figmaapi-production.up.railway.app";
 export const SCENE_PACKAGE_VERSION = 1;
+
+const LEGACY_LOCAL_API_ORIGINS = new Set([
+  "http://localhost:8787",
+  "http://127.0.0.1:8787",
+]);
 
 const SCENE_PACKAGE_MAGIC = new Uint8Array([0x57, 0x32, 0x46, 0x31]);
 const SCENE_PACKAGE_IV_BYTES = 12;
@@ -36,6 +41,11 @@ export function normalizeApiBaseUrl(rawValue, fallback = DEFAULT_API_BASE_URL) {
     });
   }
   return url.origin;
+}
+
+export function migrateLegacyApiBaseUrl(rawValue) {
+  const normalized = normalizeApiBaseUrl(rawValue);
+  return LEGACY_LOCAL_API_ORIGINS.has(normalized) ? DEFAULT_API_BASE_URL : normalized;
 }
 
 export function apiUrl(baseUrl, path) {

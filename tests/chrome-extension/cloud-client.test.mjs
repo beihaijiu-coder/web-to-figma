@@ -10,6 +10,7 @@ import {
   encryptSceneCapture,
   listInstallations,
   listPendingConversionJobs,
+  migrateLegacyApiBaseUrl,
   normalizeApiBaseUrl,
   pollDeviceConnection,
   requestJson,
@@ -34,6 +35,14 @@ test("cloud client normalizes API base URLs to origins", () => {
   assert.equal(normalizeApiBaseUrl("http://localhost:8787/v1/me"), "http://localhost:8787");
   assert.equal(normalizeApiBaseUrl("https://api.example.com/path?x=1"), "https://api.example.com");
   assert.throws(() => normalizeApiBaseUrl("ftp://example.com"), WebToFigmaApiError);
+});
+
+test("cloud client migrates legacy localhost settings to the Railway API", () => {
+  assert.equal(
+    migrateLegacyApiBaseUrl("http://localhost:8787"),
+    "https://web-to-figmaapi-production.up.railway.app"
+  );
+  assert.equal(migrateLegacyApiBaseUrl("https://api.example.com/path"), "https://api.example.com");
 });
 
 test("scene packages round-trip through authenticated AES-GCM encryption", async () => {

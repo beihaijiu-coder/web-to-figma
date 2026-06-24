@@ -9,6 +9,7 @@ import {
   encryptSceneCapture,
   getDeviceMe,
   listInstallations,
+  migrateLegacyApiBaseUrl,
   normalizeApiBaseUrl,
   markCaptureFailed,
   pollDeviceConnection,
@@ -59,7 +60,12 @@ async function getCloudApiBaseUrl() {
     const data = await chrome.storage.local.get({
       [WEB_TO_FIGMA_API_BASE_URL_KEY]: DEFAULT_API_BASE_URL,
     });
-    return normalizeApiBaseUrl(data?.[WEB_TO_FIGMA_API_BASE_URL_KEY]);
+    const stored = normalizeApiBaseUrl(data?.[WEB_TO_FIGMA_API_BASE_URL_KEY]);
+    const migrated = migrateLegacyApiBaseUrl(stored);
+    if (migrated !== stored) {
+      await chrome.storage.local.set({ [WEB_TO_FIGMA_API_BASE_URL_KEY]: migrated });
+    }
+    return migrated;
   } catch {
     return DEFAULT_API_BASE_URL;
   }

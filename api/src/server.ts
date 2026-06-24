@@ -5,7 +5,7 @@ import { PostgresDeviceConnectionRepository } from "./db/device-connections.js";
 import { PostgresConversionJobRepository } from "./db/conversion-jobs.js";
 import { createPostgresPool, PostgresCurrentUserRepository } from "./db/postgres.js";
 import { DeviceConnectionService } from "./device/device-connection.js";
-import { LocalPackageStorage } from "./storage/local-package-storage.js";
+import { R2PackageStorage } from "./storage/r2-package-storage.js";
 import { R2PreviewStorage } from "./storage/r2-preview-storage.js";
 
 loadLocalEnvironment();
@@ -13,7 +13,7 @@ loadLocalEnvironment();
 const config = createConfig();
 const pool = createPostgresPool(config.databaseUrl);
 const conversionJobs = new PostgresConversionJobRepository(pool);
-const packageStorage = new LocalPackageStorage(config.conversions.packageStorageDir);
+const packageStorage = new R2PackageStorage(config.r2);
 const previewStorage = new R2PreviewStorage(config.r2);
 const api = await createApi({
   config,

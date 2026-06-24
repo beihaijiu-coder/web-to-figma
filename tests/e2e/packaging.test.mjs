@@ -73,7 +73,9 @@ test("Figma plugin UI stays focused on import progress without commercial/report
   assert.deepEqual(manifest.editorType, ["figma"]);
   assert.equal(manifest.main, "src/importer.js");
   assert.equal(manifest.ui, "ui/index.html");
-  assert.deepEqual(manifest.networkAccess.allowedDomains, ["none"]);
+  assert.deepEqual(manifest.networkAccess.allowedDomains, [
+    "https://web-to-figmaapi-production.up.railway.app",
+  ]);
   assert.equal(
     manifest.networkAccess.allowedDomains.some((domain) => /localhost|127\.0\.0\.1/.test(domain)),
     false
@@ -88,6 +90,8 @@ test("Figma plugin UI stays focused on import progress without commercial/report
   );
   assert.equal(ui.includes("Import clipboard capture"), true);
   assert.equal(ui.includes("Connect account"), true);
+  assert.equal(ui.includes('value="https://web-to-figmaapi-production.up.railway.app"'), true);
+  assert.equal(ui.includes("Account connection · dev"), false);
   assert.equal(ui.includes("clientType: \"figma_plugin\""), true);
   assert.equal(ui.includes("manualCaptureInput"), true);
   assert.equal(ui.includes("Figma cannot read the clipboard directly"), true);
