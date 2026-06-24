@@ -70,6 +70,24 @@ test("a custom Railway account website URL overrides the temporary Railway domai
   assert.equal(config.publicWebUrl, "https://app.example.com");
 });
 
+test("Railway accepts an assignment-style origins value pasted into one variable field", () => {
+  const config = createConfig({
+    ...baseEnvironment,
+    RAILWAY_ENVIRONMENT_NAME: "production",
+    CLERK_AUTHORIZED_PARTIES: "CLERK_AUTHORIZED_PARTIES=http://localhost:4173",
+    CORS_ALLOWED_ORIGINS: "CORS_ALLOWED_ORIGINS=http://localhost:4173",
+  });
+
+  assert.deepEqual(config.clerk.authorizedParties, [
+    "http://localhost:4173",
+    "https://web-to-figma-production.up.railway.app",
+  ]);
+  assert.deepEqual(config.corsAllowedOrigins, [
+    "http://localhost:4173",
+    "https://web-to-figma-production.up.railway.app",
+  ]);
+});
+
 test("explicit API host and port override Railway defaults", () => {
   const config = createConfig({
     ...baseEnvironment,

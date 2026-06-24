@@ -167,8 +167,16 @@ export function loadLocalEnvironment(path = ".env.local"): void {
   }
 }
 
+function stripRepeatedEnvironmentName(value: string | undefined, variableName: string): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return trimmed;
+
+  const assignmentPrefix = `${variableName}=`;
+  return trimmed.startsWith(assignmentPrefix) ? trimmed.slice(assignmentPrefix.length).trim() : trimmed;
+}
+
 function resolvePublicWebUrl(environment: NodeJS.ProcessEnv): string {
-  const configuredUrl = environment.PUBLIC_WEB_URL?.trim();
+  const configuredUrl = stripRepeatedEnvironmentName(environment.PUBLIC_WEB_URL, "PUBLIC_WEB_URL");
   const isRailwayProduction = environment.RAILWAY_ENVIRONMENT_NAME === "production";
 
   // Railway deployments can retain an old local default while service variables are
@@ -184,6 +192,11 @@ function resolvePublicWebUrl(environment: NodeJS.ProcessEnv): string {
 export function createConfig(environment: NodeJS.ProcessEnv = process.env): ApiConfig {
   const parsed = environmentSchema.safeParse({
     ...environment,
+    CLERK_AUTHORIZED_PARTIES: stripRepeatedEnvironmentName(
+      environment.CLERK_AUTHORIZED_PARTIES,
+      "CLERK_AUTHORIZED_PARTIES"
+    ),
+    CORS_ALLOWED_ORIGINS: stripRepeatedEnvironmentName(environment.CORS_ALLOWED_ORIGINS, "CORS_ALLOWED_ORIGINS"),
     PUBLIC_WEB_URL: resolvePublicWebUrl(environment),
   });
   if (!parsed.success) {
@@ -192,18 +205,22 @@ export function createConfig(environment: NodeJS.ProcessEnv = process.env): ApiC
     );
   }
 
-  const authorizedParties = originList(
+  const publicWebOrigin = new URL(parsed.data.PUBLIC_WEB_URL).origin;
+  const authorizedParties = [...new Set([...originList(
     parsed.data.CLERK_AUTHORIZED_PARTIES,
     "CLERK_AUTHORIZED_PARTIES",
     parsed.data.NODE_ENV
-  );
+  ), publicWebOrigin])];
   const corsAllowedOrigins = originList(
     parsed.data.CORS_ALLOWED_ORIGINS,
     "CORS_ALLOWED_ORIGINS",
     parsed.data.NODE_ENV,
     { allowClientOrigins: true }
   );
-  const effectiveCorsAllowedOrigins = withDevelopmentClientCorsOrigins(corsAllowedOrigins, parsed.data.NODE_ENV);
+  const effectiveCorsAllowedOrigins = withDevelopmentClientCorsOrigins(
+    [...new Set([...corsAllowedOrigins, publicWebOrigin])],
+    parsed.data.NODE_ENV
+  );
   const audience = commaSeparated(parsed.data.CLERK_AUDIENCE);
   const railwayPort = parsed.data.PORT;
   const host = parsed.data.API_HOST ?? (railwayPort ? "0.0.0.0" : "127.0.0.1");
