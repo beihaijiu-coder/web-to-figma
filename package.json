@@ -13,6 +13,7 @@
     "dev:api": "npm run dev --workspace @web-to-figma/api",
     "start:api": "npm run start --workspace @web-to-figma/api",
     "dev:site": "node marketing-site/dev.mjs",
+    "start:site": "node marketing-site/server.mjs",
     "build:api": "npm run build --workspace @web-to-figma/api",
     "check:api": "npm run check --workspace @web-to-figma/api",
     "migrate:api": "npm run migrate --workspace @web-to-figma/api",

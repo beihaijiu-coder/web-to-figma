@@ -22,3 +22,14 @@ node marketing-site/build.mjs --site-url https://your-domain.example
 ## 本地预览
 
 生成后可用任意静态文件服务器指向 `marketing-site/dist/`。发布前请替换“开始使用”区域中的真实 Figma 插件与 Chrome 扩展下载地址，并补上已发布的服务条款和隐私政策链接。
+
+## Railway 临时部署
+
+网站服务使用仓库根目录的 `railway-site.json`，不要与 API 的 `railway.json` 混用。需要配置：
+
+- `SITE_URL`：网站的 HTTPS 根 URL
+- `WEB_TO_FIGMA_API_BASE_URL`：云端 API 根 URL
+- `CLERK_PUBLISHABLE_KEY`：可公开的 Clerk 前端密钥
+- `SITE_ALLOW_INDEXING=false`：临时域名期间禁止搜索引擎收录
+
+确定正式域名后，更新 `SITE_URL` 并将 `SITE_ALLOW_INDEXING` 改为 `true`。

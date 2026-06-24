@@ -25,7 +25,8 @@ function sitemapFor(canonicalUrl) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>${canonicalUrl}</loc>\n  </url>\n</urlset>\n`;
 }
 
-function robotsFor(canonicalUrl) {
+function robotsFor(canonicalUrl, allowIndexing) {
+  if (!allowIndexing) return 'User-agent: *\nDisallow: /\n';
   return `User-agent: *\nAllow: /\n\nSitemap: ${canonicalUrl}sitemap.xml\n`;
 }
 
@@ -43,11 +44,14 @@ export async function buildMarketingSite({
   apiBaseUrl = process.env.WEB_TO_FIGMA_API_BASE_URL,
   clerkPublishableKey = process.env.CLERK_PUBLISHABLE_KEY,
   clerkFrontendApiUrl = process.env.CLERK_FRONTEND_API_URL,
+  allowIndexing = process.env.SITE_ALLOW_INDEXING === 'true',
 } = {}) {
   const origin = normalizeSiteUrl(siteUrl);
   const canonicalUrl = `${origin}/`;
   const template = await readFile(path.join(sourceDirectory, 'index.html'), 'utf8');
-  const html = template.replaceAll('{{CANONICAL_URL}}', canonicalUrl);
+  const html = template
+    .replaceAll('{{CANONICAL_URL}}', canonicalUrl)
+    .replaceAll('{{ROBOTS_DIRECTIVE}}', allowIndexing ? 'index,follow' : 'noindex,nofollow');
   const connectTemplate = await readFile(path.join(sourceDirectory, 'connect-device.html'), 'utf8');
   const accountTemplate = await readFile(path.join(sourceDirectory, 'account.html'), 'utf8');
   const authConfig = renderConnectConfig({ apiBaseUrl, clerkPublishableKey, clerkFrontendApiUrl });
@@ -71,7 +75,7 @@ export async function buildMarketingSite({
     copyFile(path.join(sourceDirectory, 'connect-device.js'), path.join(outputDirectory, 'connect-device.js')),
     copyFile(path.join(sourceDirectory, 'account.js'), path.join(outputDirectory, 'account.js')),
     copyFile(iconSource, path.join(outputDirectory, 'assets', 'web-to-figma-icon.png')),
-    writeFile(path.join(outputDirectory, 'robots.txt'), robotsFor(canonicalUrl), 'utf8'),
+    writeFile(path.join(outputDirectory, 'robots.txt'), robotsFor(canonicalUrl, allowIndexing), 'utf8'),
     writeFile(path.join(outputDirectory, 'sitemap.xml'), sitemapFor(canonicalUrl), 'utf8'),
   ]);
 

@@ -22,6 +22,7 @@ test('builds matching canonical, robots, and sitemap assets', async () => {
       apiBaseUrl: 'https://api.webtofigma.example',
       clerkPublishableKey: 'pk_test_example',
       clerkFrontendApiUrl: 'https://clerk.webtofigma.example',
+      allowIndexing: true,
     });
     const [html, connectHtml, connectScript, accountHtml, accountScript, robots, sitemap] = await Promise.all([
       readFile(path.join(outputDirectory, 'index.html'), 'utf8'),
@@ -34,6 +35,7 @@ test('builds matching canonical, robots, and sitemap assets', async () => {
     ]);
 
     assert.match(html, /<link rel="canonical" href="https:\/\/webtofigma\.example\/"/);
+    assert.match(html, /<meta name="robots" content="index,follow"/);
     assert.match(connectHtml, /<meta name="robots" content="noindex,nofollow"/);
     assert.match(connectHtml, /"apiBaseUrl":"https:\/\/api\.webtofigma\.example"/);
     assert.match(connectHtml, /"clerkPublishableKey":"pk_test_example"/);
@@ -46,6 +48,28 @@ test('builds matching canonical, robots, and sitemap assets', async () => {
     assert.doesNotMatch(sitemap, /connect\/device/);
     assert.doesNotMatch(sitemap, /account/);
     assert.doesNotMatch(sitemap, /lastmod/);
+  } finally {
+    await rm(outputDirectory, { force: true, recursive: true });
+  }
+});
+
+test('blocks indexing on temporary deployment domains by default', async () => {
+  const outputDirectory = await mkdtemp(path.join(os.tmpdir(), 'web-to-figma-preview-'));
+
+  try {
+    await buildMarketingSite({
+      siteUrl: 'https://temporary-site.up.railway.app/',
+      outputDirectory,
+      apiBaseUrl: 'https://api.example.com',
+      clerkPublishableKey: 'pk_test_example',
+    });
+    const [html, robots] = await Promise.all([
+      readFile(path.join(outputDirectory, 'index.html'), 'utf8'),
+      readFile(path.join(outputDirectory, 'robots.txt'), 'utf8'),
+    ]);
+
+    assert.match(html, /<meta name="robots" content="noindex,nofollow"/);
+    assert.equal(robots, 'User-agent: *\nDisallow: /\n');
   } finally {
     await rm(outputDirectory, { force: true, recursive: true });
   }
