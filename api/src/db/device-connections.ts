@@ -148,15 +148,43 @@ export class PostgresDeviceConnectionRepository implements DeviceConnectionRepos
         return null;
       }
 
-      const installation = await client.query<{ id: string }>(
-        `
-          INSERT INTO installations (user_id, client_type, display_name)
-          VALUES ($1, $2, $3)
-          RETURNING id
-        `,
-        [input.userId, connection.client_type, connection.requested_client_name]
-      );
-      const installationId = installation.rows[0]?.id;
+      let installationId: string | undefined;
+      if (connection.requested_client_name) {
+        const existingInstallation = await client.query<{ id: string }>(
+          `
+            SELECT id
+            FROM installations
+            WHERE user_id = $1
+              AND client_type = $2
+              AND display_name = $3
+              AND status = 'active'
+            FOR UPDATE
+          `,
+          [input.userId, connection.client_type, connection.requested_client_name]
+        );
+        installationId = existingInstallation.rows[0]?.id;
+      }
+      if (installationId) {
+        await this.#revokeInstallationCredentials(client, installationId, input.now, "installation_reconnected");
+        await client.query(
+          `
+            UPDATE installations
+            SET display_name = $2, last_seen_at = $3
+            WHERE id = $1
+          `,
+          [installationId, connection.requested_client_name, input.now]
+        );
+      } else {
+        const installation = await client.query<{ id: string }>(
+          `
+            INSERT INTO installations (user_id, client_type, display_name)
+            VALUES ($1, $2, $3)
+            RETURNING id
+          `,
+          [input.userId, connection.client_type, connection.requested_client_name]
+        );
+        installationId = installation.rows[0]?.id;
+      }
       if (!installationId) throw new Error("Installation creation returned no row");
 
       await client.query(
@@ -456,6 +484,7 @@ export class PostgresDeviceConnectionRepository implements DeviceConnectionRepos
         SELECT id, client_type, display_name, status, created_at, last_seen_at
         FROM installations
         WHERE user_id = $1
+          AND status = 'active'
         ORDER BY last_seen_at DESC, created_at DESC
       `,
       [input.userId]
@@ -488,28 +517,7 @@ export class PostgresDeviceConnectionRepository implements DeviceConnectionRepos
         return false;
       }
 
-      await client.query(
-        "UPDATE access_tokens SET revoked_at = COALESCE(revoked_at, $2) WHERE installation_id = $1",
-        [input.installationId, input.now]
-      );
-      await client.query(
-        `
-          UPDATE refresh_token_families
-          SET revoked_at = COALESCE(revoked_at, $2), revoke_reason = COALESCE(revoke_reason, 'installation_revoked')
-          WHERE installation_id = $1
-        `,
-        [input.installationId, input.now]
-      );
-      await client.query(
-        `
-          UPDATE refresh_tokens
-          SET status = 'revoked', revoked_at = COALESCE(revoked_at, $2)
-          WHERE family_id IN (
-            SELECT id FROM refresh_token_families WHERE installation_id = $1
-          ) AND status = 'active'
-        `,
-        [input.installationId, input.now]
-      );
+      await this.#revokeInstallationCredentials(client, input.installationId, input.now, "installation_revoked");
 
       const terminalJobs = await client.query<{ id: string }>(
         `
@@ -541,6 +549,36 @@ export class PostgresDeviceConnectionRepository implements DeviceConnectionRepos
     } finally {
       client.release();
     }
+  }
+
+  async #revokeInstallationCredentials(
+    client: pg.PoolClient,
+    installationId: string,
+    now: Date,
+    reason: string
+  ): Promise<void> {
+    await client.query(
+      "UPDATE access_tokens SET revoked_at = COALESCE(revoked_at, $2) WHERE installation_id = $1",
+      [installationId, now]
+    );
+    await client.query(
+      `
+        UPDATE refresh_token_families
+        SET revoked_at = COALESCE(revoked_at, $2), revoke_reason = COALESCE(revoke_reason, $3)
+        WHERE installation_id = $1
+      `,
+      [installationId, now, reason]
+    );
+    await client.query(
+      `
+        UPDATE refresh_tokens
+        SET status = 'revoked', revoked_at = COALESCE(revoked_at, $2)
+        WHERE family_id IN (
+          SELECT id FROM refresh_token_families WHERE installation_id = $1
+        ) AND status = 'active'
+      `,
+      [installationId, now]
+    );
   }
 
   async #issueTokenPair(

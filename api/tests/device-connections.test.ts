@@ -83,6 +83,67 @@ test("device connection approves once and exchanges a device code for installati
   await database.close();
 });
 
+test("reconnecting the same named client reuses its installation and revokes old credentials", async () => {
+  const database = await migratedPglite();
+  const pool = pglitePool(database);
+  const users = new PostgresCurrentUserRepository(pool);
+  const connections = new PostgresDeviceConnectionRepository(pool);
+  const service = new DeviceConnectionService(connections, testConfig());
+  const user = await users.resolveCurrentUser({
+    clerkUserId: "user_clerk_reconnect",
+    sessionId: "sess_reconnect",
+    email: "reconnect@example.com",
+  });
+
+  const firstConnection = await service.create({
+    clientType: "chrome_extension",
+    requestedClientName: "Chrome extension",
+  });
+  const firstApproval = await service.approve(firstConnection.userCode, user.user.id);
+  assert.ok(firstApproval);
+  const firstTokenResult = expectApproved(
+    await connections.pollConnection({
+      deviceCodeHash: hashOpaqueToken(firstConnection.deviceCode),
+      now: new Date(Date.now() + 6_000),
+      accessTokenTtlSeconds: 900,
+      refreshTokenTtlSeconds: 2_592_000,
+    })
+  );
+
+  const secondConnection = await service.create({
+    clientType: "chrome_extension",
+    requestedClientName: "Chrome extension",
+  });
+  const secondApproval = await service.approve(secondConnection.userCode, user.user.id);
+  assert.ok(secondApproval);
+  assert.equal(secondApproval.installationId, firstApproval.installationId);
+
+  const oldPrincipal = await connections.authenticateAccessToken({
+    accessTokenHash: hashOpaqueToken(firstTokenResult.tokens.accessToken),
+    now: new Date(Date.now() + 7_000),
+  });
+  assert.equal(oldPrincipal, null);
+
+  const secondTokenResult = expectApproved(
+    await connections.pollConnection({
+      deviceCodeHash: hashOpaqueToken(secondConnection.deviceCode),
+      now: new Date(Date.now() + 8_000),
+      accessTokenTtlSeconds: 900,
+      refreshTokenTtlSeconds: 2_592_000,
+    })
+  );
+  const newPrincipal = await connections.authenticateAccessToken({
+    accessTokenHash: hashOpaqueToken(secondTokenResult.tokens.accessToken),
+    now: new Date(Date.now() + 9_000),
+  });
+  assert.equal(newPrincipal?.installationId, firstApproval.installationId);
+
+  const activeInstallations = await service.listUserInstallations(user.user.id);
+  assert.deepEqual(activeInstallations.map((installation) => installation.id), [firstApproval.installationId]);
+
+  await database.close();
+});
+
 test("refresh token rotation detects reuse and revokes installation access", async () => {
   const database = await migratedPglite();
   const pool = pglitePool(database);
