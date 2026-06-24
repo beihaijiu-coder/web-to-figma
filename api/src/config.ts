@@ -2,8 +2,9 @@ import { z } from "zod";
 
 const environmentSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-  API_HOST: z.string().min(1).default("127.0.0.1"),
-  API_PORT: z.coerce.number().int().min(1).max(65_535).default(8787),
+  API_HOST: z.string().min(1).optional(),
+  API_PORT: z.coerce.number().int().min(1).max(65_535).optional(),
+  PORT: z.coerce.number().int().min(1).max(65_535).optional(),
   DATABASE_URL: z
     .string()
     .min(1, "DATABASE_URL is required")
@@ -184,6 +185,9 @@ export function createConfig(environment: NodeJS.ProcessEnv = process.env): ApiC
   );
   const effectiveCorsAllowedOrigins = withDevelopmentClientCorsOrigins(corsAllowedOrigins, parsed.data.NODE_ENV);
   const audience = commaSeparated(parsed.data.CLERK_AUDIENCE);
+  const railwayPort = parsed.data.PORT;
+  const host = parsed.data.API_HOST ?? (railwayPort ? "0.0.0.0" : "127.0.0.1");
+  const port = parsed.data.API_PORT ?? railwayPort ?? 8787;
 
   if (parsed.data.NODE_ENV === "production" && !audience.length) {
     throw new ConfigurationError([
@@ -200,8 +204,8 @@ export function createConfig(environment: NodeJS.ProcessEnv = process.env): ApiC
 
   return {
     environment: parsed.data.NODE_ENV,
-    host: parsed.data.API_HOST,
-    port: parsed.data.API_PORT,
+    host,
+    port,
     databaseUrl: parsed.data.DATABASE_URL,
     clerk,
     corsAllowedOrigins: effectiveCorsAllowedOrigins,

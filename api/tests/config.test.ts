@@ -25,6 +25,8 @@ const baseEnvironment = {
 test("configuration parses origin lists and optional audience", () => {
   const config = createConfig(baseEnvironment);
 
+  assert.equal(config.host, "127.0.0.1");
+  assert.equal(config.port, 8787);
   assert.deepEqual(config.clerk.authorizedParties, [
     "http://localhost:4173",
     "https://app.example.com",
@@ -38,6 +40,26 @@ test("configuration parses origin lists and optional audience", () => {
   assert.deepEqual(config.clerk.audience, ["web-to-figma-web"]);
   assert.equal(config.device.connectionTtlSeconds, 600);
   assert.equal(config.r2.bucketName, "web-to-figma-test");
+});
+
+test("Railway PORT binds the API to all interfaces", () => {
+  const { API_HOST: _apiHost, API_PORT: _apiPort, ...railwayEnvironment } = baseEnvironment;
+  const config = createConfig({ ...railwayEnvironment, PORT: "4321" });
+
+  assert.equal(config.host, "0.0.0.0");
+  assert.equal(config.port, 4321);
+});
+
+test("explicit API host and port override Railway defaults", () => {
+  const config = createConfig({
+    ...baseEnvironment,
+    API_HOST: "127.0.0.2",
+    API_PORT: "9876",
+    PORT: "4321",
+  });
+
+  assert.equal(config.host, "127.0.0.2");
+  assert.equal(config.port, 9876);
 });
 
 test("configuration rejects missing secrets before the server starts", () => {
