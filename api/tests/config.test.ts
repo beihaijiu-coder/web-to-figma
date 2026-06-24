@@ -50,6 +50,26 @@ test("Railway PORT binds the API to all interfaces", () => {
   assert.equal(config.port, 4321);
 });
 
+test("Railway production never issues a localhost device-approval link", () => {
+  const { PUBLIC_WEB_URL: _publicWebUrl, ...railwayEnvironment } = baseEnvironment;
+  const config = createConfig({
+    ...railwayEnvironment,
+    RAILWAY_ENVIRONMENT_NAME: "production",
+  });
+
+  assert.equal(config.publicWebUrl, "https://web-to-figma-production.up.railway.app");
+});
+
+test("a custom Railway account website URL overrides the temporary Railway domain", () => {
+  const config = createConfig({
+    ...baseEnvironment,
+    RAILWAY_ENVIRONMENT_NAME: "production",
+    PUBLIC_WEB_URL: "https://app.example.com",
+  });
+
+  assert.equal(config.publicWebUrl, "https://app.example.com");
+});
+
 test("explicit API host and port override Railway defaults", () => {
   const config = createConfig({
     ...baseEnvironment,

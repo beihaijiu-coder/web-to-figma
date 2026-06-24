@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+const localAccountWebsiteUrl = "http://localhost:4173";
+const railwayAccountWebsiteUrl = "https://web-to-figma-production.up.railway.app";
+
 const environmentSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   API_HOST: z.string().min(1).optional(),
@@ -14,13 +17,13 @@ const environmentSchema = z.object({
     ),
   CLERK_PUBLISHABLE_KEY: z.string().min(1, "CLERK_PUBLISHABLE_KEY is required"),
   CLERK_SECRET_KEY: z.string().min(1, "CLERK_SECRET_KEY is required"),
-  CLERK_AUTHORIZED_PARTIES: z.string().min(1, "CLERK_AUTHORIZED_PARTIES is required").default("http://localhost:4173"),
+  CLERK_AUTHORIZED_PARTIES: z.string().min(1, "CLERK_AUTHORIZED_PARTIES is required").default(localAccountWebsiteUrl),
   CLERK_AUDIENCE: z.string().optional().default(""),
   CORS_ALLOWED_ORIGINS: z
     .string()
     .min(1, "CORS_ALLOWED_ORIGINS is required")
-    .default("http://localhost:4173,null,chrome-extension://*"),
-  PUBLIC_WEB_URL: z.string().url().default("http://localhost:4173"),
+    .default(`${localAccountWebsiteUrl},null,chrome-extension://*`),
+  PUBLIC_WEB_URL: z.string().url(),
   DEVICE_CONNECTION_TTL_SECONDS: z.coerce.number().int().min(60).max(3_600).default(600),
   DEVICE_POLL_INTERVAL_SECONDS: z.coerce.number().int().min(3).max(60).default(5),
   ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(3_600).default(900),
@@ -164,8 +167,25 @@ export function loadLocalEnvironment(path = ".env.local"): void {
   }
 }
 
+function resolvePublicWebUrl(environment: NodeJS.ProcessEnv): string {
+  const configuredUrl = environment.PUBLIC_WEB_URL?.trim();
+  const isRailwayProduction = environment.RAILWAY_ENVIRONMENT_NAME === "production";
+
+  // Railway deployments can retain an old local default while service variables are
+  // being configured. A public device-approval link must never send users to their
+  // own localhost. An explicitly configured public/custom domain still takes priority.
+  if (isRailwayProduction && (!configuredUrl || configuredUrl === localAccountWebsiteUrl)) {
+    return railwayAccountWebsiteUrl;
+  }
+
+  return configuredUrl ?? localAccountWebsiteUrl;
+}
+
 export function createConfig(environment: NodeJS.ProcessEnv = process.env): ApiConfig {
-  const parsed = environmentSchema.safeParse(environment);
+  const parsed = environmentSchema.safeParse({
+    ...environment,
+    PUBLIC_WEB_URL: resolvePublicWebUrl(environment),
+  });
   if (!parsed.success) {
     throw new ConfigurationError(
       parsed.error.issues.map((issue) => `${issue.path.join(".") || "environment"}: ${issue.message}`)
