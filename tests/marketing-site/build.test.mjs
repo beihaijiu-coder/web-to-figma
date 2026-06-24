@@ -40,6 +40,10 @@ test('builds matching canonical, robots, and sitemap assets', async () => {
     assert.match(connectHtml, /"apiBaseUrl":"https:\/\/api\.webtofigma\.example"/);
     assert.match(connectHtml, /"clerkPublishableKey":"pk_test_example"/);
     assert.match(connectScript, /device-connections\/approve/);
+    assert.match(connectScript, /authenticateWithRedirect/);
+    assert.match(connectScript, /oauth_google/);
+    assert.match(connectScript, /device-connection-approved/);
+    assert.doesNotMatch(connectHtml, /确认连接/);
     assert.match(accountHtml, /<meta name="robots" content="noindex,nofollow"/);
     assert.match(accountHtml, /"apiBaseUrl":"https:\/\/api\.webtofigma\.example"/);
     assert.match(accountScript, /\/v1\/me/);

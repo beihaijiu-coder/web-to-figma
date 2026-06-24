@@ -20,24 +20,8 @@
 
       <section class="connect-card">
         <p class="eyebrow">账号连接</p>
-        <h1 id="connect-title">连接这个 Web to Figma 客户端</h1>
-        <p class="lead connect-lead">
-          请确认验证码与你在 Chrome 扩展或 Figma 插件中看到的一致。批准后，这台客户端会获得自己的短期访问凭证；不会获得你的 Google 或 Clerk 登录凭证。
-        </p>
-
-        <div class="device-code" aria-label="连接验证码">
-          <span>验证码</span>
-          <strong id="userCode">读取中...</strong>
-        </div>
-
-        <div id="authMount" class="auth-mount"></div>
-
-        <div class="connect-actions">
-          <button id="approveBtn" class="button" type="button" disabled>确认连接</button>
-          <button id="denyBtn" class="button button-secondary" type="button" disabled>拒绝</button>
-        </div>
-
-        <p id="connectStatus" class="connect-status" aria-live="polite"></p>
+        <h1 id="connect-title">正在打开 Google 登录</h1>
+        <p id="connectStatus" class="lead connect-lead" aria-live="polite">正在安全连接你的客户端…</p>
       </section>
     </main>
   </body>

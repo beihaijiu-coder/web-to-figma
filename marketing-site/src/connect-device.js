@@ -1,10 +1,6 @@
 (() => {
   const configNode = document.getElementById('connect-config');
-  const userCodeNode = document.getElementById('userCode');
   const statusNode = document.getElementById('connectStatus');
-  const authMount = document.getElementById('authMount');
-  const approveBtn = document.getElementById('approveBtn');
-  const denyBtn = document.getElementById('denyBtn');
 
   const config = JSON.parse(configNode?.textContent || '{}');
   const params = new URLSearchParams(window.location.search);
@@ -12,6 +8,17 @@
 
   function setStatus(message) {
     statusNode.textContent = message || '';
+  }
+
+  function notifyExtensionOfApproval() {
+    window.postMessage(
+      {
+        source: 'web-to-figma-connect',
+        type: 'device-connection-approved',
+        userCode,
+      },
+      window.location.origin
+    );
   }
 
   function normalizeApiBaseUrl(value) {
@@ -51,9 +58,15 @@
     });
   }
 
+  async function approveAndReturnToClient() {
+    setStatus('正在完成账号连接…');
+    await submitDecision('approve');
+    notifyExtensionOfApproval();
+    setStatus('连接完成，正在回到原网页…');
+  }
+
   async function initializeClerk() {
     if (!hasUsableClerkConfig() || config.clerkPublishableKey === 'pk_test_replace_me') {
-      authMount.innerHTML = '<p class="connect-note">还没有配置 Clerk Publishable Key。填入本地环境变量后，这里会显示登录和确认按钮。</p>';
       setStatus('等待配置 Clerk 前端密钥。');
       return null;
     }
@@ -71,18 +84,23 @@
       ui: { ClerkUI: window.__internal_ClerkUICtor },
     });
 
-    authMount.innerHTML = window.Clerk.isSignedIn ? '<div id="userButton"></div>' : '<div id="signIn"></div>';
     if (window.Clerk.isSignedIn) {
-      window.Clerk.mountUserButton(document.getElementById('userButton'));
-      approveBtn.disabled = false;
-      denyBtn.disabled = false;
-      setStatus('请确认连接请求。');
-    } else {
-      window.Clerk.mountSignIn(document.getElementById('signIn'));
-      setStatus('请先登录 Web to Figma。');
+      await approveAndReturnToClient();
+      return window.Clerk;
     }
 
-    return window.Clerk;
+    const signIn = window.Clerk.client?.signIn;
+    if (!signIn?.authenticateWithRedirect) {
+      throw new Error('Google 登录暂时不可用，请稍后重试。');
+    }
+
+    setStatus('正在打开 Google 登录…');
+    await signIn.authenticateWithRedirect({
+      strategy: 'oauth_google',
+      redirectUrl: window.location.href,
+      redirectUrlComplete: window.location.href,
+    });
+    return null;
   }
 
   async function submitDecision(kind) {
@@ -107,28 +125,10 @@
     return body;
   }
 
-  async function handleDecision(kind) {
-    approveBtn.disabled = true;
-    denyBtn.disabled = true;
-    setStatus(kind === 'approve' ? '正在批准连接...' : '正在拒绝连接...');
-    try {
-      await submitDecision(kind);
-      setStatus(kind === 'approve' ? '已批准连接，可以回到客户端。' : '已拒绝连接。');
-    } catch (error) {
-      approveBtn.disabled = false;
-      denyBtn.disabled = false;
-      setStatus(error.message || String(error));
-    }
-  }
-
-  userCodeNode.textContent = userCode || '缺少验证码';
   if (!userCode) {
     setStatus('连接链接缺少 user_code，请从 Chrome 扩展或 Figma 插件重新发起连接。');
     return;
   }
-
-  approveBtn.addEventListener('click', () => handleDecision('approve'));
-  denyBtn.addEventListener('click', () => handleDecision('deny'));
 
   initializeClerk().catch((error) => {
     setStatus(error.message || String(error));

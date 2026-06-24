@@ -148,6 +148,52 @@ async function clearPendingCloudConnection() {
   await chrome.storage.session.remove([WEB_TO_FIGMA_PENDING_CONNECTION_KEY]);
 }
 
+async function returnToCloudConnectionSource(pendingConnection) {
+  const sourceTabId = Number(pendingConnection?.sourceTabId || 0);
+  const authorizationTabId = Number(pendingConnection?.authorizationTabId || 0);
+
+  if (sourceTabId > 0 && sourceTabId !== authorizationTabId) {
+    try {
+      await chrome.tabs.update(sourceTabId, { active: true });
+    } catch {
+      // The original page may have been closed while the user was signing in.
+    }
+  }
+
+  if (authorizationTabId > 0 && authorizationTabId !== sourceTabId) {
+    try {
+      await chrome.tabs.remove(authorizationTabId);
+    } catch {
+      // The user may already have closed the temporary sign-in tab.
+    }
+  }
+}
+
+async function finishApprovedCloudConnection(pendingConnection, result) {
+  if (result.status !== 200) return false;
+  await saveCloudTokens(result.body);
+  await clearPendingCloudConnection();
+  await returnToCloudConnectionSource(pendingConnection);
+  return true;
+}
+
+async function pollApprovedCloudConnection(pendingConnection) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const result = await pollDeviceConnection({
+      baseUrl: pendingConnection.apiBaseUrl,
+      deviceCode: pendingConnection.deviceCode,
+    });
+    if (await finishApprovedCloudConnection(pendingConnection, result)) return true;
+
+    if (result.status !== 202 && result.status !== 429) return false;
+    if (attempt === 2) return false;
+
+    const intervalSeconds = Math.max(1, Number(result.body?.interval || pendingConnection.interval || 5));
+    await sleep(intervalSeconds * 1_000);
+  }
+  return false;
+}
+
 async function refreshCloudAccessToken(baseUrl, refreshToken) {
   const tokens = await refreshDeviceTokens({ baseUrl, refreshToken });
   await saveCloudTokens(tokens);
@@ -183,9 +229,7 @@ async function getCloudAccountStatus() {
           baseUrl: pendingConnection.apiBaseUrl || baseUrl,
           deviceCode: pendingConnection.deviceCode,
         });
-        if (result.status === 200) {
-          await saveCloudTokens(result.body);
-          await clearPendingCloudConnection();
+        if (await finishApprovedCloudConnection(pendingConnection, result)) {
           return getCloudAccountStatus();
         }
         if (result.body?.interval) {
@@ -227,13 +271,15 @@ async function getCloudAccountStatus() {
 
 async function startCloudAccountConnection() {
   const baseUrl = await getCloudApiBaseUrl();
+  const activeTabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  const sourceTab = activeTabs.find((tab) => isCapturableTab(tab));
   const connection = await createDeviceConnection({
     baseUrl,
     clientType: WEB_TO_FIGMA_CLIENT_TYPE,
     requestedClientName: "Chrome extension",
   });
 
-  await chrome.tabs.create({ url: connection.verificationUriComplete });
+  const authorizationTab = await chrome.tabs.create({ url: connection.verificationUriComplete });
   await savePendingCloudConnection({
     status: "pending",
     apiBaseUrl: baseUrl,
@@ -242,6 +288,9 @@ async function startCloudAccountConnection() {
     interval: connection.interval,
     expiresAt: Date.now() + Math.max(30, Number(connection.expiresIn) || 600) * 1_000,
     verificationUriComplete: connection.verificationUriComplete,
+    verificationOrigin: new URL(connection.verificationUriComplete).origin,
+    authorizationTabId: authorizationTab.id || null,
+    sourceTabId: sourceTab?.id || null,
     startedAt: new Date().toISOString(),
   });
 
@@ -1055,6 +1104,27 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
       if (msg.type === "WEB_TO_FIGMA_CLOUD_CONNECT") {
         sendResponse(await startCloudAccountConnection());
+        return;
+      }
+
+      if (msg.type === "WEB_TO_FIGMA_CLOUD_CONNECTION_APPROVED") {
+        const pendingConnection = await getPendingCloudConnection();
+        const senderTabId = Number(sender?.tab?.id || 0);
+        const senderOrigin = sender?.tab?.url ? new URL(sender.tab.url).origin : null;
+        if (
+          !pendingConnection ||
+          senderTabId <= 0 ||
+          senderTabId !== Number(pendingConnection.authorizationTabId || 0) ||
+          senderOrigin !== pendingConnection.verificationOrigin ||
+          String(msg.userCode || "").trim().toUpperCase() !== pendingConnection.userCode
+        ) {
+          throw new Error("Ignored an unexpected account-connection completion message");
+        }
+
+        if (!(await pollApprovedCloudConnection(pendingConnection))) {
+          throw new Error("账户连接尚未完成，请稍候重试。");
+        }
+        sendResponse({ ok: true, connected: true });
         return;
       }
 

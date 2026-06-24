@@ -10,6 +10,10 @@ test("Chrome extension is packaged for clipboard handoff instead of JSON downloa
     new URL("../../chrome-extension/src/background.js", import.meta.url),
     "utf8"
   );
+  const connectionBridge = fs.readFileSync(
+    new URL("../../chrome-extension/src/connection-complete-bridge.js", import.meta.url),
+    "utf8"
+  );
   const toolbar = fs.readFileSync(
     new URL("../../chrome-extension/src/inpage-toolbar.js", import.meta.url),
     "utf8"
@@ -25,6 +29,11 @@ test("Chrome extension is packaged for clipboard handoff instead of JSON downloa
 
   assert.equal(manifest.permissions.includes("downloads"), false);
   assert.equal(manifest.permissions.includes("clipboardWrite"), true);
+  assert.equal(
+    manifest.content_scripts[0].matches.includes("https://web-to-figma-production.up.railway.app/connect/device/*"),
+    true
+  );
+  assert.deepEqual(manifest.content_scripts[0].js, ["src/connection-complete-bridge.js"]);
   assert.equal(
     manifest.web_accessible_resources[0].resources.includes("src/scene-capture.js"),
     true
@@ -58,6 +67,10 @@ test("Chrome extension is packaged for clipboard handoff instead of JSON downloa
   assert.equal(background.includes("createCloudTaskPreview"), true);
   assert.equal(background.includes("downscalePreviewInPage"), true);
   assert.equal(background.includes("submitCaptureToCloud(payload, msg.targetInstallationId || null, tab, previewImageDataUrl)"), true);
+  assert.equal(background.includes("WEB_TO_FIGMA_CLOUD_CONNECTION_APPROVED"), true);
+  assert.equal(background.includes("returnToCloudConnectionSource"), true);
+  assert.equal(connectionBridge.includes("device-connection-approved"), true);
+  assert.equal(connectionBridge.includes("WEB_TO_FIGMA_CLOUD_CONNECTION_APPROVED"), true);
   assert.equal(popup.includes("账号任务队列"), true);
   assert.equal(popupHtml.includes("发送方式"), true);
   assert.equal(popupHtml.includes("账号任务队列（推荐）"), true);

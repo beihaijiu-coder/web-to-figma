@@ -13,6 +13,19 @@
     "service_worker": "src/background.js",
     "type": "module"
   },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://web-to-figma-production.up.railway.app/connect/device/*",
+        "http://localhost:4173/connect/device/*",
+        "http://127.0.0.1:4173/connect/device/*"
+      ],
+      "js": [
+        "src/connection-complete-bridge.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
   "icons": {
     "16": "assets/icons/icon16.png",
     "48": "assets/icons/icon48.png",
