@@ -48,15 +48,16 @@
       #${ROOT_ID} {
         position: fixed;
         top: 16px;
-        right: 16px;
-        width: 320px;
+        left: 50%;
+        width: min(620px, calc(100vw - 32px));
         z-index: 2147483647;
-        border-radius: 14px;
-        border: 1px solid #d9dee5;
-        background: #ffffff;
-        box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
+        border: 1px solid #3a3a42;
+        border-radius: 16px;
+        background: #1d1d21;
+        box-shadow: 0 6px 8px rgba(0, 0, 0, 0.28);
+        transform: translateX(-50%);
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        color: #111827;
+        color: #f7f7fa;
         overflow: hidden;
       }
 
@@ -68,46 +69,256 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 10px 12px;
-        border-bottom: 1px solid #e5e7eb;
-        background: linear-gradient(180deg, #f9fafb 0%, #ffffff 100%);
+        min-height: 58px;
+        padding: 8px 10px 8px 14px;
+        border-bottom: 1px solid #3a3a42;
+        background: #26262b;
       }
 
       #${ROOT_ID} .title {
         display: inline-flex;
         align-items: center;
-        gap: 6px;
+        gap: 8px;
         font-size: 13px;
-        font-weight: 600;
+        font-weight: 700;
       }
 
       #${ROOT_ID} .title-logo {
-        width: 16px;
-        height: 16px;
+        width: 20px;
+        height: 20px;
         display: block;
         flex-shrink: 0;
       }
 
-      #${ROOT_ID} .close {
+      #${ROOT_ID} .bar-actions {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        margin-left: auto;
+      }
+
+      #${ROOT_ID} .bar-actions .capture {
+        flex: 0 0 auto;
+        min-height: 38px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        padding: 8px 11px;
+      }
+
+      #${ROOT_ID} .action-icon {
+        width: 16px;
+        height: 16px;
+        display: block;
+        flex: 0 0 16px;
+      }
+
+      #${ROOT_ID} .toolbar-link {
+        min-height: 36px;
         border: 0;
+        border-radius: 8px;
+        padding: 7px 9px;
+        background: transparent;
+        color: #b9bac4;
+        font-size: 12px;
+        font-weight: 650;
+        cursor: pointer;
+      }
+
+      #${ROOT_ID} .toolbar-link:hover {
+        background: #34343a;
+        color: #ffffff;
+      }
+
+      #${ROOT_ID} .toolbar-link:disabled {
+        opacity: 0.55;
+        cursor: default;
+      }
+
+      #${ROOT_ID} .close {
+        width: 28px;
+        height: 28px;
+        display: grid;
+        place-items: center;
+        border: 1px solid transparent;
+        border-radius: 8px;
         background: transparent;
         cursor: pointer;
-        color: #6b7280;
-        font-size: 20px;
+        color: #b9bac4;
+        font-size: 18px;
         line-height: 1;
-        border-radius: 6px;
-        transition: background 0.15s ease, color 0.15s ease;
+        transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
       }
 
       #${ROOT_ID} .close:hover {
-        background: #f3f4f6;
-        color: #374151;
+        border-color: #4b4b55;
+        background: #34343a;
+        color: #ffffff;
       }
 
       #${ROOT_ID} .body {
-        padding: 12px;
+        padding: 12px 14px 14px;
         display: grid;
         gap: 10px;
+      }
+
+      #${ROOT_ID} .page-summary {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        min-width: 0;
+      }
+
+      #${ROOT_ID} .page-mark {
+        width: 32px;
+        height: 32px;
+        flex: 0 0 32px;
+        display: grid;
+        place-items: center;
+        border-radius: 8px;
+        background: #6c63ff;
+        color: #ffffff;
+        font-size: 13px;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      #${ROOT_ID} .page-copy {
+        min-width: 0;
+        display: grid;
+        gap: 2px;
+      }
+
+      #${ROOT_ID} .page-title {
+        overflow: hidden;
+        color: #f7f7fa;
+        font-size: 13px;
+        font-weight: 700;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      #${ROOT_ID} .page-domain {
+        overflow: hidden;
+        color: #a6a7b2;
+        font-size: 11px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      #${ROOT_ID} .capture-intro {
+        margin: 0;
+        color: #a6a7b2;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      #${ROOT_ID} .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      #${ROOT_ID} .capture {
+        flex: 1 1 150px;
+        min-height: 42px;
+        border: 1px solid #4a4a54;
+        border-radius: 10px;
+        padding: 9px 11px;
+        background: #6c63ff;
+        color: #ffffff;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+      }
+
+      #${ROOT_ID} .capture:hover {
+        background: #5c54e8;
+      }
+
+      #${ROOT_ID} .capture.secondary {
+        border-color: #4a4a54;
+        background: #2a2a30;
+        color: #f3f3f7;
+      }
+
+      #${ROOT_ID} .capture.secondary:hover {
+        border-color: #696975;
+        background: #34343b;
+      }
+
+      #${ROOT_ID} .capture.continue,
+      #${ROOT_ID} .capture.stop-scroll {
+        flex-basis: 100%;
+      }
+
+      #${ROOT_ID} .capture.continue {
+        border-color: #3f3f48;
+        background: transparent;
+        color: #b9bac4;
+        font-weight: 650;
+      }
+
+      #${ROOT_ID} .capture.continue:hover {
+        border-color: #595963;
+        background: #2a2a30;
+      }
+
+      #${ROOT_ID} .capture.stop-scroll {
+        border-color: #8d633e;
+        background: #382a20;
+        color: #ffd09f;
+      }
+
+      #${ROOT_ID} .capture:active {
+        transform: translateY(1px);
+      }
+
+      #${ROOT_ID} .capture:disabled {
+        opacity: 0.58;
+        cursor: default;
+        transform: none;
+      }
+
+      #${ROOT_ID} .advanced {
+        border-top: 1px solid #35353d;
+        padding-top: 2px;
+      }
+
+      #${ROOT_ID} .advanced summary {
+        min-height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        color: #b9bac4;
+        font-size: 12px;
+        font-weight: 650;
+        cursor: pointer;
+        list-style: none;
+      }
+
+      #${ROOT_ID} .advanced summary::-webkit-details-marker {
+        display: none;
+      }
+
+      #${ROOT_ID} .advanced summary::after {
+        content: "+";
+        color: #8c8d99;
+        font-size: 16px;
+        font-weight: 500;
+      }
+
+      #${ROOT_ID} .advanced[open] summary::after {
+        content: "−";
+      }
+
+      #${ROOT_ID} .advanced-body {
+        display: grid;
+        gap: 10px;
+        padding: 6px 0 4px;
       }
 
       #${ROOT_ID} .row {
@@ -115,7 +326,8 @@
         align-items: center;
         justify-content: space-between;
         gap: 12px;
-        font-size: 13px;
+        color: #d9dae1;
+        font-size: 12px;
       }
 
       #${ROOT_ID} .switch {
@@ -137,7 +349,7 @@
         width: 100%;
         height: 100%;
         border-radius: 999px;
-        background: #d1d5db;
+        background: #555660;
         transition: background 0.18s ease;
         position: relative;
       }
@@ -156,7 +368,7 @@
       }
 
       #${ROOT_ID} .switch input:checked + .switch-slider {
-        background: #111827;
+        background: #6c63ff;
       }
 
       #${ROOT_ID} .switch input:checked + .switch-slider::after {
@@ -165,33 +377,38 @@
 
       #${ROOT_ID} select {
         min-width: 88px;
-        padding: 4px 6px;
+        padding: 6px 8px;
         border-radius: 8px;
-        border: 1px solid #d1d5db;
-        background: #fff;
-        color: #111827;
+        border: 1px solid #4a4a54;
+        background: #29292f;
+        color: #f3f3f7;
       }
 
       #${ROOT_ID} .hint {
         font-size: 12px;
-        color: #6b7280;
-        margin: 0;
-      }
-
-      #${ROOT_ID} .status {
-        min-height: 18px;
-        font-size: 12px;
-        color: #4b5563;
+        color: #9d9eaa;
         margin: 0;
         line-height: 1.45;
       }
 
+      #${ROOT_ID} .status {
+        min-height: 0;
+        font-size: 12px;
+        color: #c4c5ce;
+        margin: 0;
+        line-height: 1.45;
+      }
+
+      #${ROOT_ID} .status:empty {
+        display: none;
+      }
+
       #${ROOT_ID} .status.success {
-        color: #166534;
+        color: #78e8b1;
       }
 
       #${ROOT_ID} .status.error {
-        color: #b91c1c;
+        color: #ff9b94;
       }
 
       #${ROOT_ID} .safety {
@@ -206,13 +423,12 @@
 
       #${ROOT_ID} .copy-card {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 132px;
-        gap: 12px;
+        gap: 10px;
         align-items: center;
         padding: 12px;
+        border: 1px solid #39735a;
         border-radius: 12px;
-        border: 1px solid #dbeafe;
-        background: #f8fbff;
+        background: #1d3329;
       }
 
       #${ROOT_ID} .copy-card-text {
@@ -226,14 +442,14 @@
         font-size: 15px;
         line-height: 1.2;
         font-weight: 700;
-        color: #111827;
+        color: #e8fff4;
       }
 
       #${ROOT_ID} .copy-description {
         margin: 0;
         font-size: 12px;
         line-height: 1.4;
-        color: #4b5563;
+        color: #a8d9c3;
       }
 
       #${ROOT_ID} .copy-action {
@@ -242,21 +458,19 @@
         justify-content: center;
         gap: 8px;
         width: 100%;
-        min-height: 48px;
+        min-height: 40px;
         border: 0;
         border-radius: 10px;
-        background: #1d9bf0;
-        color: #fff;
-        font-size: 17px;
-        font-weight: 650;
+        background: #55d79b;
+        color: #10251b;
+        font-size: 13px;
+        font-weight: 700;
         cursor: pointer;
-        box-shadow: 0 8px 20px rgba(29, 155, 240, 0.22);
-        transition: transform 0.08s ease, background 0.15s ease, box-shadow 0.15s ease;
+        transition: transform 0.18s ease, background 0.18s ease;
       }
 
       #${ROOT_ID} .copy-action:hover {
-        background: #0f8de3;
-        box-shadow: 0 10px 24px rgba(29, 155, 240, 0.28);
+        background: #6be4ab;
       }
 
       #${ROOT_ID} .copy-action:active {
@@ -279,7 +493,7 @@
         width: max-content;
         border: 0;
         background: transparent;
-        color: #2563eb;
+        color: #c4c5ce;
         font-size: 12px;
         font-weight: 650;
         padding: 0;
@@ -296,72 +510,37 @@
         cursor: default;
       }
 
-      #${ROOT_ID} .actions {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-      }
-
-      #${ROOT_ID} .capture {
-        width: 100%;
-        border: 0;
-        border-radius: 8px;
-        background: #111827;
-        color: #fff;
-        font-size: 13px;
-        padding: 9px 12px;
-        cursor: pointer;
-        transition: transform 0.08s ease, box-shadow 0.2s ease, background 0.15s ease;
-      }
-
-      #${ROOT_ID} .capture:hover {
-        background: #1f2937;
-        box-shadow: 0 6px 16px rgba(17, 24, 39, 0.2);
-      }
-
-      #${ROOT_ID} .capture.secondary {
-        background: #f3f4f6;
-        color: #111827;
-      }
-
-      #${ROOT_ID} .capture.secondary:hover {
-        background: #e5e7eb;
-        box-shadow: none;
-      }
-
-      #${ROOT_ID} .capture.continue {
-        grid-column: 1 / -1;
-        background: #eef6ff;
-        color: #075985;
-      }
-
-      #${ROOT_ID} .capture.continue:hover {
-        background: #dff0ff;
-        box-shadow: none;
-      }
-
-      #${ROOT_ID} .capture.stop-scroll {
-        grid-column: 1 / -1;
-        background: #fff7ed;
-        color: #9a3412;
-      }
-
-      #${ROOT_ID} .capture.stop-scroll:hover {
-        background: #ffedd5;
-        box-shadow: none;
-      }
-
-      #${ROOT_ID} .capture:active {
-        transform: translateY(1px);
-      }
-
-      #${ROOT_ID} .capture:disabled {
-        opacity: 0.65;
-        cursor: default;
-      }
-
       #${ROOT_ID} .hidden {
         display: none !important;
+      }
+
+      @media (max-width: 640px) {
+        #${ROOT_ID} {
+          top: 8px;
+          left: 8px;
+          width: calc(100vw - 16px);
+          transform: none;
+        }
+
+        #${ROOT_ID} .bar {
+          align-items: flex-start;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        #${ROOT_ID} .bar-actions {
+          width: 100%;
+          margin-left: 0;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        #${ROOT_ID} *,
+        #${ROOT_ID} *::before,
+        #${ROOT_ID} *::after {
+          scroll-behavior: auto !important;
+          transition-duration: 0.01ms !important;
+        }
       }
     `;
     return style;
@@ -372,6 +551,9 @@
       typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.getURL
         ? chrome.runtime.getURL("assets/icons/icon16.png")
         : "";
+    const pageTitle = String(document.title || "当前网页").trim() || "当前网页";
+    const pageDomain = String(window.location.hostname || window.location.href || "当前标签页");
+    const pageInitial = (pageDomain.replace(/^www\./, "").charAt(0) || "W").toUpperCase();
     const root = document.createElement("section");
 
     root.id = ROOT_ID;
@@ -382,46 +564,43 @@
           <img class="title-logo" src="${logoUrl}" alt="" data-figma-capture-ignore="1" />
           <span data-figma-capture-ignore="1">Web to Figma</span>
         </div>
-        <button class="close" type="button" title="关闭" data-figma-capture-ignore="1">×</button>
+        <div class="bar-actions" data-figma-capture-ignore="1">
+          <button class="capture" id="figmaCaptureBtn" type="button" data-figma-capture-ignore="1">
+            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true" data-figma-capture-ignore="1">
+              <rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"></rect>
+              <path d="M3 9h18" fill="none" stroke="currentColor" stroke-width="1.8"></path>
+            </svg>
+            <span data-capture-label data-figma-capture-ignore="1">捕获页面</span>
+          </button>
+          <button class="capture secondary" id="figmaSelectBtn" type="button" data-figma-capture-ignore="1">
+            <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true" data-figma-capture-ignore="1">
+              <path d="M5 8V5h3M16 5h3v3M19 16v3h-3M8 19H5v-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+              <path d="M10 9l6 3-3 1-1 3-2-7z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path>
+            </svg>
+            <span data-figma-capture-ignore="1">选择元素</span>
+          </button>
+          <button class="toolbar-link hidden" id="figmaAccountBtn" type="button" tabindex="-1" aria-hidden="true" data-figma-capture-ignore="1">同步</button>
+          <button class="close" type="button" title="关闭" aria-label="关闭 Web to Figma" data-figma-capture-ignore="1">×</button>
+        </div>
       </div>
       <div class="body" data-figma-capture-ignore="1">
-        <label class="row" data-figma-capture-ignore="1">
-          <span data-figma-capture-ignore="1">图片质量</span>
-          <select id="figmaQualityMode" data-figma-capture-ignore="1">
-            <option value="standard">标准</option>
-            <option value="hd">高清</option>
-          </select>
-        </label>
-        <label class="row" data-figma-capture-ignore="1">
-          <span data-figma-capture-ignore="1">跨域图片代理模式</span>
-          <span class="switch" data-figma-capture-ignore="1">
-            <input id="figmaProxyToggle" type="checkbox" data-figma-capture-ignore="1" />
-            <span class="switch-slider" data-figma-capture-ignore="1"></span>
-          </span>
-        </label>
-        <label class="row" id="figmaConcurrencyRow" data-figma-capture-ignore="1">
-          <span data-figma-capture-ignore="1">图片采集并发</span>
-          <select id="figmaProxyConcurrency" data-figma-capture-ignore="1">
-            <option value="4">4</option>
-            <option value="6">6</option>
-            <option value="8">8</option>
-            <option value="10">10</option>
-            <option value="12">12</option>
-            <option value="16">16</option>
-            <option value="20">20</option>
-            <option value="infinite">无限</option>
-          </select>
-        </label>
-        <p class="hint" data-figma-capture-ignore="1">高清会优先采集大图；代理可减少丢图，但会变慢。</p>
+        <section class="page-summary" aria-label="当前捕获页面" data-figma-capture-ignore="1">
+          <span class="page-mark" aria-hidden="true" data-figma-capture-ignore="1">${escapeXml(pageInitial)}</span>
+          <div class="page-copy" data-figma-capture-ignore="1">
+            <strong class="page-title" data-figma-capture-ignore="1">${escapeXml(pageTitle)}</strong>
+            <span class="page-domain" data-figma-capture-ignore="1">${escapeXml(pageDomain)}</span>
+          </div>
+        </section>
+        <p class="capture-intro" data-figma-capture-ignore="1">捕获后会自动复制到本地剪贴板，回到 Figma 插件即可导入。</p>
         <p class="status" id="figmaCaptureStatus" data-figma-capture-ignore="1"></p>
         <section class="copy-card hidden" id="figmaCopyCard" data-figma-capture-ignore="1">
           <div class="copy-card-text" data-figma-capture-ignore="1">
-            <p class="copy-title" data-figma-capture-ignore="1">Copy to clipboard</p>
+            <p class="copy-title" data-figma-capture-ignore="1">已准备好导入</p>
             <p class="copy-description" id="figmaCopyDescription" data-figma-capture-ignore="1">
-              Capture is ready for Figma import.
+              捕获数据已复制，回到 Figma 插件点击“导入最近捕获”。
             </p>
             <button class="copy-json" id="figmaCopyJsonBtn" type="button" data-figma-capture-ignore="1">
-              Copy JSON for plugin import
+              直接复制为 SVG 粘贴到画布
             </button>
           </div>
           <button class="copy-action" id="figmaCopyBtn" type="button" data-figma-capture-ignore="1">
@@ -429,16 +608,46 @@
               <path d="M8 8h10v12H8z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path>
               <path d="M5 16H4V4h12v1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
             </svg>
-            <span data-figma-capture-ignore="1">Copy</span>
+            <span data-figma-capture-ignore="1">再次复制捕获数据</span>
           </button>
         </section>
         <div class="actions" data-figma-capture-ignore="1">
-          <button class="capture" id="figmaCaptureBtn" type="button" data-figma-capture-ignore="1">捕获当前网页</button>
-          <button class="capture secondary" id="figmaSelectBtn" type="button" data-figma-capture-ignore="1">选择组件</button>
-          <button class="capture continue" id="figmaAccountBtn" type="button" data-figma-capture-ignore="1">账号与任务队列</button>
           <button class="capture stop-scroll hidden" id="figmaStopScrollBtn" type="button" data-figma-capture-ignore="1">停止滚动并生成</button>
           <button class="capture continue hidden" id="figmaContinueFlowBtn" type="button" data-figma-capture-ignore="1">继续采集下一段</button>
         </div>
+        <details class="advanced" data-figma-capture-ignore="1">
+          <summary data-figma-capture-ignore="1">采集设置</summary>
+          <div class="advanced-body" data-figma-capture-ignore="1">
+            <label class="row" data-figma-capture-ignore="1">
+              <span data-figma-capture-ignore="1">图片质量</span>
+              <select id="figmaQualityMode" data-figma-capture-ignore="1">
+                <option value="standard">标准</option>
+                <option value="hd">高清</option>
+              </select>
+            </label>
+            <label class="row" data-figma-capture-ignore="1">
+              <span data-figma-capture-ignore="1">跨域图片代理</span>
+              <span class="switch" data-figma-capture-ignore="1">
+                <input id="figmaProxyToggle" type="checkbox" data-figma-capture-ignore="1" />
+                <span class="switch-slider" data-figma-capture-ignore="1"></span>
+              </span>
+            </label>
+            <label class="row" id="figmaConcurrencyRow" data-figma-capture-ignore="1">
+              <span data-figma-capture-ignore="1">图片采集并发</span>
+              <select id="figmaProxyConcurrency" data-figma-capture-ignore="1">
+                <option value="4">4</option>
+                <option value="6">6</option>
+                <option value="8">8</option>
+                <option value="10">10</option>
+                <option value="12">12</option>
+                <option value="16">16</option>
+                <option value="20">20</option>
+                <option value="infinite">无限</option>
+              </select>
+            </label>
+            <p class="hint" data-figma-capture-ignore="1">高清会优先采集大图；代理只在图片缺失时开启。</p>
+          </div>
+        </details>
       </div>
     `;
     return root;
@@ -486,7 +695,7 @@
       parts.push(`代理成功 ${proxy.successes || 0} 个，失败 ${proxy.failures || 0} 个`);
     }
 
-    return parts.length ? parts.join("；") : "已复制转换结果。";
+    return parts.length ? parts.join("；") : "采集完成。";
   }
 
   async function copyPayloadForFigma(payload) {
@@ -752,6 +961,7 @@
   const concurrency = root.querySelector("#figmaProxyConcurrency");
   const concurrencyRow = root.querySelector("#figmaConcurrencyRow");
   const captureBtn = root.querySelector("#figmaCaptureBtn");
+  const captureBtnLabel = root.querySelector("[data-capture-label]");
   const selectBtn = root.querySelector("#figmaSelectBtn");
   const accountBtn = root.querySelector("#figmaAccountBtn");
   const stopScrollBtn = root.querySelector("#figmaStopScrollBtn");
@@ -774,7 +984,7 @@
 
   function setBusy(busy) {
     captureBtn.disabled = busy;
-    captureBtn.textContent = busy ? "转换中..." : pendingCopyPayload ? "复制结果" : "捕获当前网页";
+    captureBtnLabel.textContent = busy ? "正在捕获…" : pendingCopyPayload ? "再次复制" : "捕获页面";
     quality.disabled = busy;
     toggle.disabled = busy;
     concurrency.disabled = busy;
@@ -810,8 +1020,8 @@
   }
 
   function flowCopyText(flow) {
-    if (!flow || !flow.isSegment) return "Copied as SVG. Go to the Figma canvas and press Ctrl/Cmd+V.";
-    if (flow.stoppedByUser) return "已按停止位置复制当前已加载内容。";
+    if (!flow || !flow.isSegment) return "捕获数据已复制，回到 Figma 插件即可导入。";
+    if (flow.stoppedByUser) return "已按停止位置复制当前已加载内容，回到 Figma 插件导入。";
     return flow.hasMore
       ? `已复制内容流第 ${flow.segmentIndex} 段。可先导入 Figma，再继续采集下一段。`
       : `已复制内容流第 ${flow.segmentIndex} 段。页面已到达结尾。`;
@@ -824,7 +1034,7 @@
       : flow.hasMore
       ? `检测到连续内容流，已采集第 ${flow.segmentIndex} 段。`
       : `连续内容流第 ${flow.segmentIndex} 段已采集，页面已到达结尾。`;
-    return `${base}${summary === "已复制转换结果。" ? "" : summary}`;
+    return `${base}${summary === "采集完成。" ? "" : summary}`;
   }
 
   function startCapture(selector = "body", contentFlow = { action: "auto" }) {
@@ -876,7 +1086,7 @@
           return;
         }
 
-        copyCanvasSvgForFigma(res.payload)
+        copyPayloadForFigma(res.payload)
           .then(() => {
             pendingCopyPayload = res.payload;
             const flow = res.payload?.capture?.contentFlow || null;
@@ -889,9 +1099,9 @@
                 ? flowStatusText(flow, summary)
                 : res.handoffError
                 ? `云端发送失败，已改用剪贴板：${res.handoffError.message}`
-                : summary === "已复制转换结果。"
-                ? "已复制为 SVG，请回到 Figma 画布直接粘贴。"
-                : `已复制为 SVG，请回到 Figma 画布直接粘贴。${summary}`,
+                : summary === "采集完成。"
+                ? "已复制捕获数据，请回到 Figma 插件导入。"
+                : `已复制捕获数据，请回到 Figma 插件导入。${summary}`,
               "success"
             );
           })
@@ -900,8 +1110,8 @@
             const flow = res.payload?.capture?.contentFlow || null;
             setContinueFlow(flow);
             setStopScrollAvailable(false);
-            setCopyCard(true, "Automatic SVG copy failed. Click Copy to place SVG on your clipboard.");
-            captureBtn.textContent = "复制结果";
+            setCopyCard(true, "自动复制失败，请点击下方按钮再次复制捕获数据。");
+            captureBtnLabel.textContent = "再次复制";
             setStatus(`采集完成，但自动复制失败：${error.message || error}。请点击“复制结果”。`);
           });
       }
@@ -911,11 +1121,11 @@
   function copyPendingPayload() {
     if (!pendingCopyPayload) return false;
     setBusy(true);
-    copyCanvasSvgForFigma(pendingCopyPayload)
+    copyPayloadForFigma(pendingCopyPayload)
       .then(() => {
         setBusy(false);
-        setCopyCard(true, "Copied as SVG. Go to the Figma canvas and press Ctrl/Cmd+V.");
-        setStatus("已复制为 SVG，请回到 Figma 画布直接粘贴。", "success");
+        setCopyCard(true, "捕获数据已复制，回到 Figma 插件即可导入。");
+        setStatus("已复制捕获数据，请回到 Figma 插件导入。", "success");
       })
       .catch((error) => {
         setBusy(false);
@@ -927,15 +1137,15 @@
   function copyPendingJsonPayload() {
     if (!pendingCopyPayload) return false;
     setBusy(true);
-    copyPayloadForFigma(pendingCopyPayload)
+    copyCanvasSvgForFigma(pendingCopyPayload)
       .then(() => {
         setBusy(false);
-        setCopyCard(true, "Copied JSON. Use the Figma plugin import button, not canvas paste.");
-        setStatus("已复制 JSON，请回到 Figma 插件导入。", "success");
+        setCopyCard(true, "已复制为 SVG，可直接粘贴到 Figma 画布；结构化导入仍建议使用插件。");
+        setStatus("已复制为 SVG，请回到 Figma 画布粘贴。", "success");
       })
       .catch((error) => {
         setBusy(false);
-        setStatus(`复制 JSON 失败：${error.message || error}`, "error");
+        setStatus(`复制 SVG 失败：${error.message || error}`, "error");
       });
     return true;
   }

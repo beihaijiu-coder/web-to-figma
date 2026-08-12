@@ -2347,7 +2347,7 @@
 
   figmaApi.showUI(__html__, {
     width: 420,
-    height: 640,
+    height: 440,
     themeColors: true,
   });
 

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -462,76 +462,542 @@
       display: none !important;
     }
   </style>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --bg: #16161a;
+      --surface: #1e1e23;
+      --surface-raised: #27272d;
+      --line: #3a3a43;
+      --line-strong: #50505c;
+      --ink: #f7f7fa;
+      --muted: #a7a8b3;
+      --accent: #6c63ff;
+      --accent-hover: #5c54e8;
+      --success: #55d79b;
+      --danger: #ff8d86;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    body {
+      min-height: 100vh;
+      background: var(--bg);
+    }
+
+    .shell {
+      min-height: 100vh;
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+
+    .top {
+      min-height: 38px;
+    }
+
+    .brand {
+      gap: 9px;
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 760;
+    }
+
+    .brand-copy {
+      display: grid;
+      gap: 1px;
+    }
+
+    .brand-copy small {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 500;
+    }
+
+    .dot {
+      position: relative;
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      background: var(--accent);
+      color: transparent;
+      overflow: hidden;
+    }
+
+    .dot::before,
+    .dot::after {
+      position: absolute;
+      border: 2px solid white;
+      border-radius: 4px;
+      content: "";
+    }
+
+    .dot::before {
+      top: 7px;
+      left: 6px;
+      width: 10px;
+      height: 10px;
+    }
+
+    .dot::after {
+      right: 6px;
+      bottom: 7px;
+      width: 9px;
+      height: 9px;
+      border-color: #b9ffdd;
+    }
+
+    .ghost {
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      padding: 0;
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    .ghost:hover {
+      border-color: var(--line);
+      background: var(--surface-raised);
+      color: white;
+    }
+
+    .start-copy {
+      display: grid;
+      gap: 4px;
+      padding: 4px 0 2px;
+      text-align: left;
+    }
+
+    .start-copy #title {
+      color: var(--ink);
+      font-size: 18px;
+      font-weight: 760;
+      letter-spacing: -0.02em;
+    }
+
+    .start-copy small {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.45;
+    }
+
+    .form {
+      gap: 10px;
+    }
+
+    .primary,
+    .secondary,
+    .danger,
+    .neutral {
+      min-height: 42px;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 12px;
+      font-weight: 720;
+      transition: background 180ms ease, border-color 180ms ease, transform 180ms ease;
+    }
+
+    .primary {
+      background: var(--accent);
+      color: white;
+    }
+
+    .primary:hover {
+      background: var(--accent-hover);
+    }
+
+    .primary:active,
+    .secondary:active,
+    .neutral:active {
+      transform: translateY(1px);
+    }
+
+    .secondary {
+      background: #303038;
+      color: var(--ink);
+    }
+
+    .secondary:hover {
+      background: #393942;
+    }
+
+    .neutral {
+      border-color: var(--line-strong);
+      color: #d4d5dc;
+    }
+
+    .neutral:hover {
+      background: #2b2b31;
+    }
+
+    .danger {
+      color: var(--danger);
+    }
+
+    .capture-help {
+      margin: -2px 2px 2px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.45;
+      text-align: center;
+    }
+
+    .local-flow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      min-height: 52px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #1a1a1f;
+      color: #c9cad2;
+      font-size: 10px;
+    }
+
+    .local-flow span {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+
+    .local-flow b {
+      width: 18px;
+      height: 18px;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 6px;
+      background: #35323f;
+      color: #b9b5ff;
+      font-size: 9px;
+    }
+
+    .local-flow i {
+      color: #6f707b;
+      font-style: normal;
+    }
+
+    .captures-panel {
+      display: grid;
+      gap: 8px;
+      padding-top: 2px;
+    }
+
+    .cloud-header {
+      align-items: center;
+      padding: 0;
+    }
+
+    .cloud-heading strong {
+      font-size: 13px;
+    }
+
+    .cloud-heading small {
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .refresh {
+      min-height: 30px;
+      padding: 6px 9px;
+      border-radius: 8px;
+      font-size: 10px;
+    }
+
+    .cloud-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      min-height: 74px;
+    }
+
+    .cloud-empty {
+      min-height: 74px;
+      border-color: var(--line);
+      border-radius: 10px;
+      color: var(--muted);
+      background: #1a1a1e;
+      font-size: 11px;
+    }
+
+    .cloud-task-card {
+      border-color: #555268;
+      border-radius: 10px;
+      background: #1a1a1f;
+    }
+
+    .cloud-task-card:hover:not(:disabled) {
+      border-color: #8e88ff;
+      background: #24242a;
+      transform: translateY(-1px);
+    }
+
+    .cloud-preview {
+      background: #25252c;
+    }
+
+    .cloud-preview-fallback {
+      border-radius: 8px;
+      background: #37334f;
+      color: #bdb9ff;
+    }
+
+    .cloud-meta {
+      padding: 8px;
+    }
+
+    .cloud-title {
+      font-size: 11px;
+    }
+
+    .cloud-url-row {
+      color: var(--muted);
+      font-size: 9px;
+    }
+
+    .url-import {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 7px;
+    }
+
+    .url-import .secondary {
+      white-space: nowrap;
+    }
+
+    .field,
+    .select {
+      min-height: 40px;
+      border-color: var(--line-strong);
+      border-radius: 9px;
+      padding: 9px 10px;
+      background: #1b1b20;
+      color: var(--ink);
+      font-size: 12px;
+    }
+
+    .field::placeholder {
+      color: #93949f;
+    }
+
+    .field:focus,
+    .select:focus,
+    button:focus-visible,
+    summary:focus-visible {
+      outline: 2px solid #9b96ff;
+      outline-offset: 2px;
+    }
+
+    .options-panel {
+      border-top: 1px solid var(--line);
+    }
+
+    .options-panel summary {
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      color: #d4d5dc;
+      font-size: 11px;
+      font-weight: 680;
+      cursor: pointer;
+      list-style: none;
+    }
+
+    .options-panel summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .options-panel summary::after {
+      color: var(--muted);
+      font-size: 15px;
+      font-weight: 400;
+      content: "+";
+    }
+
+    .options-panel[open] summary::after {
+      content: "−";
+    }
+
+    .options-body {
+      display: grid;
+      gap: 8px;
+      padding-bottom: 10px;
+    }
+
+    .options-note {
+      margin: 0;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.4;
+    }
+
+    .account-panel {
+      gap: 8px;
+      padding: 0 0 10px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+
+    .account-title {
+      color: #d4d5dc;
+      font-size: 11px;
+    }
+
+    .account-status {
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .developer-subsettings {
+      border-top: 1px solid #303038;
+    }
+
+    .developer-subsettings summary {
+      min-height: 36px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    #progressPanel {
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface);
+    }
+
+    .steps {
+      gap: 13px;
+    }
+
+    .step {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .step.active {
+      color: #a9a4ff;
+    }
+
+    .step.active .num {
+      background: var(--accent);
+    }
+
+    .num {
+      width: 24px;
+      height: 24px;
+      background: #4a4a52;
+      font-size: 11px;
+    }
+
+    .bar {
+      height: 5px;
+    }
+
+    .fill {
+      background: var(--success);
+    }
+
+    .message {
+      min-height: 18px;
+      margin: 12px 0 4px;
+      color: #d4d5dc;
+      font-size: 11px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
 </head>
 <body>
   <main class="shell">
     <header class="top">
-      <div class="brand"><span class="dot">W</span><span>Web to Figma</span></div>
-      <button id="closeBtn" class="ghost" type="button">Close</button>
+      <div class="brand">
+        <span class="dot" aria-hidden="true">W</span>
+        <span class="brand-copy">Web to Figma<small>网页捕获导入</small></span>
+      </div>
+      <button id="closeBtn" class="ghost" type="button" aria-label="关闭">×</button>
     </header>
 
-    <section class="hero" aria-hidden="true">
-      <div class="illustration">
-        <div class="card-row">
-          <div class="thumb"></div>
-          <div class="lines"><span></span><span></span><span></span></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="source">
-      <div id="title">Ready to import</div>
-      <small id="subtitle">Capture in Chrome, then import from clipboard here.</small>
+    <section class="source start-copy">
+      <div id="title">导入最近捕获</div>
+      <small id="subtitle">先在 Chrome 捕获页面，再回到这里一键导入为可编辑图层。</small>
     </section>
 
     <section class="form" id="startPanel">
-      <select id="layoutMode" class="select">
-        <option value="visual">Visual fidelity first</option>
-        <option value="editable">Editable layout first</option>
-      </select>
-      <select id="overflowMode" class="select" aria-label="Overflow content handling">
-        <option value="preserve">1. 网页还原（按网页裁剪）</option>
-        <option value="sidecar" selected>2. 网页 + 完整内容（推荐）</option>
-        <option value="show">3. 展开全部已采集内容</option>
-      </select>
-      <input id="fallbackFont" class="field" placeholder="Fallback font, e.g. Inter" value="Inter" />
-      <section class="account-panel" aria-label="Account connection">
-        <p class="account-title">Account connection</p>
-        <input id="apiBaseUrl" class="field" placeholder="API URL" value="https://web-to-figmaapi-production.up.railway.app" />
-        <div class="button-row">
-          <button id="connectAccountBtn" class="secondary" type="button">Connect account</button>
-          <button id="disconnectAccountBtn" class="neutral" type="button">Disconnect</button>
+      <button id="importClipboardBtn" class="primary" type="button">导入最近捕获</button>
+      <p class="capture-help">本地导入无需登录，捕获内容只经过你的剪贴板。</p>
+      <textarea id="manualCaptureInput" class="field capture-input hidden" placeholder="在这里粘贴 Chrome 捕获数据"></textarea>
+
+      <div class="local-flow" aria-label="本地导入流程">
+        <span><b>1</b> Chrome 捕获</span>
+        <i aria-hidden="true">→</i>
+        <span><b>2</b> 回到 Figma</span>
+        <i aria-hidden="true">→</i>
+        <span><b>3</b> 点击导入</span>
+      </div>
+
+      <div class="url-import">
+        <input id="urlInput" class="field" placeholder="输入网址，在 Chrome 中打开" />
+        <button id="openUrlBtn" class="secondary" type="button">打开网页</button>
+      </div>
+
+      <details class="options-panel">
+        <summary>导入设置</summary>
+        <div class="options-body">
+          <select id="layoutMode" class="select" aria-label="布局偏好">
+            <option value="visual">视觉还原优先</option>
+            <option value="editable">可编辑布局优先</option>
+          </select>
+          <select id="overflowMode" class="select" aria-label="溢出内容处理">
+            <option value="preserve">按网页裁剪</option>
+            <option value="sidecar" selected>保留网页并附带完整内容（推荐）</option>
+            <option value="show">展开全部已采集内容</option>
+          </select>
+          <input id="fallbackFont" class="field" aria-label="替代字体" placeholder="替代字体，例如 Inter" value="Inter" />
+          <p class="options-note">不确定时保留默认设置；字体缺失不会阻断导入。</p>
         </div>
-        <div class="cloud-header">
-          <div class="cloud-heading">
-            <strong>Captures</strong>
-            <small>Chrome captures uploaded to your account queue.</small>
-          </div>
-          <button id="importCloudBtn" class="neutral refresh" type="button" disabled>Refresh</button>
-        </div>
-        <div id="cloudTaskGrid" class="cloud-grid" aria-live="polite"></div>
-        <p id="accountStatus" class="account-status" aria-live="polite"></p>
-      </section>
-      <button id="importClipboardBtn" class="primary" type="button">Import clipboard capture</button>
-      <textarea id="manualCaptureInput" class="field capture-input hidden" placeholder="Paste Chrome capture JSON here"></textarea>
-      <input id="urlInput" class="field" placeholder="Or enter URL to open in Chrome" />
-      <button id="openUrlBtn" class="secondary" type="button">Open URL in Chrome</button>
+      </details>
+
+      <div class="hidden" aria-hidden="true">
+        <button id="importCloudBtn" type="button" disabled>刷新</button>
+        <div id="cloudTaskGrid"></div>
+        <button id="connectAccountBtn" type="button">连接</button>
+        <button id="disconnectAccountBtn" type="button">断开</button>
+        <p id="accountStatus"></p>
+        <input id="apiBaseUrl" value="https://web-to-figmaapi-production.up.railway.app" />
+      </div>
     </section>
 
     <section id="progressPanel" class="hidden">
       <ol class="steps">
         <li class="step active" data-step="handoff">
-          <span class="num">1</span><span>Access and load page</span>
+          <span class="num">1</span><span>读取捕获数据</span>
           <div class="bar"><div id="progressFill" class="fill"></div></div>
         </li>
-        <li class="step" data-step="structure"><span class="num">2</span><span>Import page structure</span></li>
-        <li class="step" data-step="images"><span class="num">3</span><span>Import image resources</span></li>
-        <li class="step" data-step="static"><span class="num">4</span><span>Import other static resources</span></li>
+        <li class="step" data-step="structure"><span class="num">2</span><span>创建页面结构</span></li>
+        <li class="step" data-step="images"><span class="num">3</span><span>导入图片资源</span></li>
+        <li class="step" data-step="static"><span class="num">4</span><span>整理可编辑图层</span></li>
       </ol>
       <p id="message" class="message"></p>
       <div class="actions">
-        <button id="cancelBtn" class="danger" type="button">Cancel</button>
-        <button id="retryBtn" class="secondary hidden" type="button">Retry</button>
+        <button id="cancelBtn" class="danger" type="button">取消导入</button>
+        <button id="retryBtn" class="secondary hidden" type="button">重试</button>
       </div>
     </section>
   </main>
@@ -563,6 +1029,7 @@
     let activeCloudTask = null;
     let storedCloudTask = null;
     const defaultApiBaseUrl = "https://web-to-figmaapi-production.up.railway.app";
+    const CLOUD_SYNC_ENABLED = false;
     const legacyLocalApiOrigins = new Set(["http://localhost:8787", "http://127.0.0.1:8787"]);
 
     function postToMain(message) {
@@ -585,7 +1052,7 @@
 
     function readableUrl(rawValue) {
       const value = String(rawValue || "").trim();
-      if (!value) return "Unknown source";
+      if (!value) return "未知来源";
       try {
         const url = new URL(value);
         return `${url.hostname}${url.pathname === "/" ? "" : url.pathname}`;
@@ -598,17 +1065,17 @@
       const time = Date.parse(isoValue || "");
       if (!Number.isFinite(time)) return "";
       const seconds = Math.max(0, Math.floor((Date.now() - time) / 1000));
-      if (seconds < 60) return "just now";
+      if (seconds < 60) return "刚刚";
       const minutes = Math.floor(seconds / 60);
-      if (minutes < 60) return `${minutes}m ago`;
+      if (minutes < 60) return `${minutes} 分钟前`;
       const hours = Math.floor(minutes / 60);
-      if (hours < 24) return `${hours}h ago`;
+      if (hours < 24) return `${hours} 小时前`;
       const days = Math.floor(hours / 24);
-      return `${days}d ago`;
+      return `${days} 天前`;
     }
 
     function taskTitle(job) {
-      return String(job?.sourceTitle || readableUrl(job?.sourceUrl) || "Untitled capture").trim();
+      return String(job?.sourceTitle || readableUrl(job?.sourceUrl) || "未命名捕获").trim();
     }
 
     function renderCloudJobs() {
@@ -617,7 +1084,7 @@
       if (!deviceAuth) {
         const empty = document.createElement("div");
         empty.className = "cloud-empty";
-        empty.textContent = "Connect your account to see Chrome captures here.";
+        empty.textContent = "连接云端同步后，Chrome 捕获会出现在这里。";
         cloudTaskGrid.append(empty);
         return;
       }
@@ -625,7 +1092,7 @@
       if (!pendingCloudJobs.length) {
         const empty = document.createElement("div");
         empty.className = "cloud-empty";
-        empty.textContent = "No cloud captures yet. Capture a page in Chrome, then refresh.";
+        empty.textContent = "还没有云端捕获。请先在 Chrome 捕获页面，再点击刷新。";
         cloudTaskGrid.append(empty);
         return;
       }
@@ -635,7 +1102,7 @@
         card.type = "button";
         card.className = "cloud-task-card";
         card.disabled = accountBusy;
-        card.title = `Import ${taskTitle(job)}`;
+        card.title = `导入 ${taskTitle(job)}`;
         card.onclick = () => importCloudJob(job);
 
         const preview = document.createElement("div");
@@ -679,7 +1146,7 @@
     function normalizeApiBaseUrl(rawValue) {
       const url = new URL(String(rawValue || defaultApiBaseUrl).trim());
       if (url.protocol !== "http:" && url.protocol !== "https:") {
-        throw new Error("API URL must start with http:// or https://.");
+        throw new Error("API 地址必须以 http:// 或 https:// 开头。");
       }
       return url.origin;
     }
@@ -703,7 +1170,7 @@
       const body = await response.json().catch(() => ({}));
       const accepted = options.acceptedStatuses || [200];
       if (!accepted.includes(response.status)) {
-        throw new Error(body?.error?.message || `API request failed: HTTP ${response.status}`);
+        throw new Error(body?.error?.message || `API 请求失败：HTTP ${response.status}`);
       }
       return { status: response.status, body };
     }
@@ -716,7 +1183,7 @@
       });
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        throw new Error(body?.error?.message || `API request failed: HTTP ${response.status}`);
+        throw new Error(body?.error?.message || `API 请求失败：HTTP ${response.status}`);
       }
       return {
         body: new Uint8Array(await response.arrayBuffer()),
@@ -731,7 +1198,7 @@
     }
 
     async function sha256Hex(value) {
-      if (!hasSubtleCrypto()) throw new Error("Web Crypto is unavailable.");
+      if (!hasSubtleCrypto()) throw new Error("当前环境不支持 Web Crypto。");
       const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", value));
       return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
     }
@@ -750,10 +1217,10 @@
       const magic = new Uint8Array([0x57, 0x32, 0x46, 0x31]);
       const body = encryptedBody instanceof Uint8Array ? encryptedBody : new Uint8Array(encryptedBody);
       if (body.length < 32 || !magic.every((byte, index) => body[index] === byte)) {
-        throw new Error("Scene package format is not supported.");
+        throw new Error("不支持这个场景包格式。");
       }
       const rawKey = decodeBase64Url(keyValue);
-      if (rawKey.length !== 32) throw new Error("Scene package key is invalid.");
+      if (rawKey.length !== 32) throw new Error("场景包密钥无效。");
       const iv = body.slice(4, 16);
       const ciphertext = body.slice(16);
       try {
@@ -765,30 +1232,30 @@
         );
         const parsed = JSON.parse(new TextDecoder().decode(plaintext));
         if (parsed?.source !== "web-to-figma" || parsed?.type !== "capture-scene" || !parsed.payload) {
-          throw new Error("Scene package payload is invalid.");
+          throw new Error("场景包内容无效。");
         }
         return parsed.payload;
       } catch {
-        throw new Error("Scene package authentication or decryption failed.");
+        throw new Error("场景包校验或解密失败。");
       }
     }
 
     async function downloadCloudTaskPayload(claim, accessToken) {
       if (hasSubtleCrypto()) {
-        setAccountStatus("Downloading and verifying the encrypted task...");
+        setAccountStatus("正在下载并校验加密任务…");
         const downloaded = await apiBytes(claim.body.download.url, accessToken);
         const expectedSha256 = claim.body.packageSha256 || downloaded.packageSha256;
         if (expectedSha256 && (await sha256Hex(downloaded.body)) !== expectedSha256) {
-          throw new Error("Task package checksum does not match.");
+          throw new Error("任务包校验值不匹配。");
         }
         return decryptScenePackage(downloaded.body, claim.body.encryption.key);
       }
 
       const downloadJson = claim.body.downloadJson?.url || claim.body.download?.url?.replace(/\/package$/, "/package-json");
-      if (!downloadJson) throw new Error("Task download endpoint is missing.");
-      setAccountStatus("Downloading task through the API compatibility path...");
+      if (!downloadJson) throw new Error("缺少任务下载地址。");
+      setAccountStatus("正在通过兼容模式下载任务…");
       const result = await apiJson(downloadJson, { accessToken });
-      if (result.body?.payload === undefined) throw new Error("Task package payload is invalid.");
+      if (result.body?.payload === undefined) throw new Error("任务包内容无效。");
       return result.body.payload;
     }
 
@@ -833,9 +1300,9 @@
       if (deviceAuth?.accessToken && Number(deviceAuth.accessTokenExpiresAt || 0) > Date.now() + 30_000) {
         return deviceAuth.accessToken;
       }
-      if (!deviceAuth && storedCloudTask) throw new Error("Reconnect the Figma plugin account to finish the task.");
+      if (!deviceAuth && storedCloudTask) throw new Error("请重新连接云端同步，以完成当前任务。");
       const refreshed = await refreshDeviceAuth(deviceAuth);
-      if (!refreshed || !deviceAuth?.accessToken) throw new Error("Connection expired. Please connect again.");
+      if (!refreshed || !deviceAuth?.accessToken) throw new Error("连接已过期，请重新连接。");
       return deviceAuth.accessToken;
     }
 
@@ -843,7 +1310,7 @@
       if (!deviceAuth) {
         pendingCloudJobs = [];
         importCloudBtn.disabled = true;
-        importCloudBtn.textContent = "Refresh";
+        importCloudBtn.textContent = "刷新";
         renderCloudJobs();
         return [];
       }
@@ -851,12 +1318,12 @@
       const result = await apiJson("/v1/conversion-jobs/pending", { accessToken });
       pendingCloudJobs = Array.isArray(result.body?.jobs) ? result.body.jobs : [];
       importCloudBtn.disabled = false;
-      importCloudBtn.textContent = "Refresh";
+      importCloudBtn.textContent = "刷新";
       renderCloudJobs();
       setAccountStatus(
         pendingCloudJobs.length
-          ? `${pendingCloudJobs.length} capture${pendingCloudJobs.length === 1 ? "" : "s"} ready. Click a card to import.`
-          : "Connected. No cloud task is waiting."
+          ? `${pendingCloudJobs.length} 个捕获已就绪，点击卡片即可导入。`
+          : "已连接，暂无等待中的云端任务。"
       );
       return pendingCloudJobs;
     }
@@ -878,12 +1345,12 @@
       if (!storedCloudTask?.taskId || !deviceAuth) return;
       const status = storedCloudTask.status;
       if (status === "claimed") {
-        setAccountStatus("A claimed cloud task is ready to retry.");
+        setAccountStatus("上次中断的云端任务可以重试。");
         await refreshPendingCloudJobs();
         return;
       }
       if (status === "importing") {
-        setAccountStatus("Cleaning an interrupted cloud import...");
+        setAccountStatus("正在清理上次中断的云端导入…");
         postToMain({ type: "cleanup-stale-cloud-task", taskId: storedCloudTask.taskId });
         return;
       }
@@ -910,7 +1377,7 @@
         if (result.body?.interval) intervalMs = Math.max(3, Number(result.body.interval)) * 1000;
       }
 
-      throw new Error("Connection request expired.");
+      throw new Error("连接请求已过期。");
     }
 
     function fallbackFontName() {
@@ -931,26 +1398,26 @@
       progressPanel.classList.remove("hidden");
       retryBtn.classList.add("hidden");
       cancelBtn.classList.remove("hidden");
-      title.textContent = "Loading Page:";
-      subtitle.textContent = payload?.source?.url || "Clipboard capture";
-      setProgress("handoff", 18, "Preparing import...");
+      title.textContent = "正在导入页面";
+      subtitle.textContent = payload?.source?.url || "剪贴板捕获";
+      setProgress("handoff", 18, "正在准备导入…");
     }
 
     function showStart(text) {
       startPanel.classList.remove("hidden");
       progressPanel.classList.add("hidden");
-      title.textContent = "Ready to import";
-      subtitle.textContent = text || "Capture in Chrome, then import from clipboard here.";
+      title.textContent = "导入最近捕获";
+      subtitle.textContent = text || "在 Chrome 捕获页面，然后在这里从剪贴板导入。";
     }
 
     function parseClipboardCapture(text) {
       const trimmed = String(text || "").trim();
       if (/^<svg[\s>]/i.test(trimmed)) {
-        throw new Error("Clipboard contains SVG. Paste it directly on the Figma canvas, or use Copy JSON for plugin import.");
+        throw new Error("剪贴板中是 SVG。请直接粘贴到 Figma 画布，或在 Chrome 中选择“复制结构数据”。");
       }
 
       if (/^</.test(trimmed)) {
-        throw new Error("Clipboard contains markup, not a Web to Figma capture JSON. Use Copy JSON for plugin import.");
+        throw new Error("剪贴板中是网页标记，不是 Web to Figma 捕获数据。");
       }
 
       const parsed = JSON.parse(text);
@@ -958,7 +1425,7 @@
         return parsed.payload;
       }
       if (parsed?.version === 1 && parsed?.root) return parsed;
-      throw new Error("Clipboard does not contain a Web to Figma capture.");
+      throw new Error("剪贴板中没有 Web to Figma 捕获数据。");
     }
 
     function importPayload(payload, cloudTaskId = null) {
@@ -981,8 +1448,8 @@
     function showManualPaste(messageText) {
       manualCaptureInput.classList.remove("hidden");
       manualCaptureInput.focus();
-      title.textContent = "Paste capture";
-      subtitle.textContent = messageText || "Paste the Chrome capture JSON here.";
+      title.textContent = "粘贴捕获数据";
+      subtitle.textContent = messageText || "请在这里粘贴 Chrome 捕获数据。";
     }
 
     function tryImportManualCapture() {
@@ -995,7 +1462,7 @@
         manualCaptureInput.classList.add("hidden");
         return true;
       } catch (error) {
-        title.textContent = "Import failed";
+        title.textContent = "导入失败";
         subtitle.textContent = error.message || String(error);
         return false;
       }
@@ -1011,7 +1478,7 @@
         manualCaptureInput.classList.add("hidden");
         return true;
       } catch (error) {
-        title.textContent = "Import failed";
+        title.textContent = "导入失败";
         subtitle.textContent = error.message || String(error);
         return false;
       }
@@ -1019,7 +1486,7 @@
 
     async function readClipboardText() {
       if (!navigator.clipboard || typeof navigator.clipboard.readText !== "function") {
-        throw new Error("Figma cannot read the clipboard directly.");
+        throw new Error("Figma 无法直接读取剪贴板。");
       }
 
       return navigator.clipboard.readText();
@@ -1028,7 +1495,7 @@
     connectAccountBtn.onclick = async () => {
       if (accountBusy) return;
       setAccountBusy(true);
-      setAccountStatus("Creating connection request...");
+      setAccountStatus("正在创建连接请求…");
       try {
         apiBaseUrl.value = normalizeApiBaseUrl(apiBaseUrl.value);
         const result = await apiJson("/v1/device-connections", {
@@ -1040,7 +1507,7 @@
           acceptedStatuses: [201],
         });
         postToMain({ type: "open-external", url: result.body.verificationUriComplete });
-        setAccountStatus(`Browser opened. Confirm code ${result.body.userCode}.`);
+        setAccountStatus(`浏览器已打开，请确认验证码 ${result.body.userCode}。`);
         await pollDeviceConnection(
           result.body.deviceCode,
           result.body.interval,
@@ -1056,7 +1523,7 @@
 
     disconnectAccountBtn.onclick = async () => {
       if (activeCloudTask) {
-        setAccountStatus("Finish or cancel the active cloud import before disconnecting.");
+        setAccountStatus("请先完成或取消当前云端导入，再断开连接。");
         return;
       }
       setAccountBusy(true);
@@ -1068,7 +1535,7 @@
         deviceAuth = null;
         pendingCloudJobs = [];
         postToMain({ type: "clear-device-auth" });
-        setAccountStatus("Disconnected and revoked on this Figma plugin.");
+        setAccountStatus("已断开连接，并撤销本 Figma 插件的授权。");
         importCloudBtn.disabled = true;
         renderCloudJobs();
       } catch (error) {
@@ -1085,19 +1552,19 @@
       let handedToImporter = false;
       try {
         if (!job) {
-          setAccountStatus("Connected. No cloud task is waiting.");
+          setAccountStatus("已连接，暂无等待中的云端任务。");
           return;
         }
 
         const accessToken = await ensureDeviceAccessToken();
-        setAccountStatus("Claiming the encrypted task...");
+        setAccountStatus("正在领取加密任务…");
         const claim = await apiJson(`/v1/conversion-jobs/${encodeURIComponent(job.id)}/claim`, {
           method: "POST",
           accessToken,
         });
         claimedTaskId = claim.body.taskId;
         if (claim.body?.encryption?.algorithm !== "A256GCM" || !claim.body?.encryption?.key) {
-          throw new Error("Task encryption metadata is missing.");
+          throw new Error("缺少任务加密信息。");
         }
 
         const payload = await downloadCloudTaskPayload(claim, accessToken);
@@ -1119,7 +1586,7 @@
           postToMain({ type: "save-cloud-task", task: storedCloudTask });
           await refreshPendingCloudJobs().catch(() => undefined);
         }
-        title.textContent = "Import failed";
+        title.textContent = "导入失败";
         subtitle.textContent = error.message || String(error);
         setAccountStatus(error.message || String(error));
       } finally {
@@ -1147,11 +1614,11 @@
         tryImportCaptureText(text);
       } catch (error) {
         if (!navigator.clipboard || typeof navigator.clipboard.readText !== "function") {
-          showManualPaste("Figma cannot read the clipboard directly. Paste the capture JSON here.");
+          showManualPaste("Figma 无法直接读取剪贴板，请在这里粘贴捕获数据。");
           return;
         }
 
-        title.textContent = "Import failed";
+        title.textContent = "导入失败";
         subtitle.textContent = error.message || String(error);
       }
     };
@@ -1185,17 +1652,17 @@
           })
         );
         window.open(url.href, "_blank");
-        title.textContent = "Chrome opened";
-        subtitle.textContent = "Capture that page with the Chrome extension, then import clipboard here.";
+        title.textContent = "Chrome 已打开";
+        subtitle.textContent = "使用 Chrome 扩展捕获该页面，然后回到这里导入剪贴板。";
       } catch {
-        title.textContent = "Invalid URL";
-        subtitle.textContent = "Enter a full http:// or https:// URL.";
+        title.textContent = "网址无效";
+        subtitle.textContent = "请输入完整的 http:// 或 https:// 网址。";
       }
     };
 
     cancelBtn.onclick = () => {
       parent.postMessage({ pluginMessage: { type: "cancel-import" } }, "*");
-      setProgress("static", 100, "Cancelling...");
+      setProgress("static", 100, "正在取消…");
     };
 
     retryBtn.onclick = () => {
@@ -1212,7 +1679,7 @@
 
       if (msg.type === "device-auth") {
         if (!msg.auth) {
-          setAccountStatus("Not connected.");
+          setAccountStatus("未连接云端同步。");
           pendingCloudJobs = [];
           renderCloudJobs();
           return;
@@ -1222,7 +1689,7 @@
         refreshDeviceAuth(msg.auth)
           .then(async (connected) => {
             if (!connected) {
-              setAccountStatus("Connection expired. Please connect again.");
+              setAccountStatus("连接已过期，请重新连接。");
               return;
             }
             await recoverStoredCloudTask();
@@ -1237,7 +1704,7 @@
       }
 
       if (msg.type === "device-auth-cleared") {
-        setAccountStatus("Not connected.");
+        setAccountStatus("未连接云端同步。");
         pendingCloudJobs = [];
         importCloudBtn.disabled = true;
         renderCloudJobs();
@@ -1257,8 +1724,8 @@
       }
 
       if (msg.type === "import-progress") {
-        if (msg.stage === "import-started") setProgress("structure", 34, "Import page structure...");
-        if (msg.stage === "creating-nodes") setProgress("images", 66, "Import image resources...");
+        if (msg.stage === "import-started") setProgress("structure", 34, "正在导入页面结构…");
+        if (msg.stage === "creating-nodes") setProgress("images", 66, "正在导入图片资源…");
         if (msg.stage === "completed") setProgress("static", 100, "");
       }
 
@@ -1266,35 +1733,37 @@
         setProgress("static", 100, "");
         if (msg.cloudTaskId) {
           reportCloudTask(msg.cloudTaskId, "imported")
-            .then(() => setAccountStatus("Cloud task completed."))
-            .catch((error) => setAccountStatus(`Import complete; settlement will retry: ${error.message || error}`));
+            .then(() => setAccountStatus("云端任务已完成。"))
+            .catch((error) => setAccountStatus(`导入已完成，任务状态将自动重试：${error.message || error}`));
         }
-        setTimeout(() => showStart("Import complete. Your Figma result is selected."), 450);
+        setTimeout(() => showStart("导入完成，结果已在 Figma 画布中选中。"), 450);
       }
 
       if (msg.type === "import-cancelled") {
         if (msg.cloudTaskId) {
           reportCloudTask(msg.cloudTaskId, "cancelled").catch((error) =>
-            setAccountStatus(`Cancelled; task cleanup will retry: ${error.message || error}`)
+            setAccountStatus(`已取消，任务清理将自动重试：${error.message || error}`)
           );
         }
-        showStart("Cancelled. Partial layers were removed from Figma.");
+        showStart("已取消，未完成的图层已从 Figma 中移除。");
       }
 
       if (msg.type === "import-failed") {
         if (msg.cloudTaskId) activeCloudTask = { taskId: msg.cloudTaskId };
         cancelBtn.classList.add("hidden");
         retryBtn.classList.remove("hidden");
-        title.textContent = "Import failed";
-        subtitle.textContent = msg.message || "Please retry.";
-        message.textContent = "Retry";
+        title.textContent = "导入失败";
+        subtitle.textContent = msg.message || "请重试。";
+        message.textContent = "可重试";
       }
     };
 
-    setAccountStatus("Checking connection...");
-    renderCloudJobs();
-    postToMain({ type: "get-device-auth" });
-    postToMain({ type: "get-cloud-task" });
+    if (CLOUD_SYNC_ENABLED) {
+      setAccountStatus("正在检查连接状态…");
+      renderCloudJobs();
+      postToMain({ type: "get-device-auth" });
+      postToMain({ type: "get-cloud-task" });
+    }
   </script>
 </body>
 </html>

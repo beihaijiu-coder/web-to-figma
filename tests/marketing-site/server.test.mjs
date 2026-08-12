@@ -27,29 +27,28 @@ async function invoke(handler, { method = 'GET', url = '/' } = {}) {
   return result;
 }
 
-test('production server exposes health and static account-connection routes', async () => {
+test('production server exposes the local-only site without account routes', async () => {
   const outputDirectory = await mkdtemp(path.join(os.tmpdir(), 'web-to-figma-server-'));
   await buildMarketingSite({
     siteUrl: 'https://temporary-site.up.railway.app/',
     outputDirectory,
-    apiBaseUrl: 'https://api.example.com',
-    clerkPublishableKey: 'pk_test_example',
   });
   const handler = createMarketingSiteRequestHandler({ rootDirectory: outputDirectory });
 
   try {
-    const [health, home, connect, missing] = await Promise.all([
+    const [health, home, connect, account, missing] = await Promise.all([
       invoke(handler, { url: '/health' }),
       invoke(handler),
       invoke(handler, { url: '/connect/device/?user_code=ABCD-EFGH' }),
+      invoke(handler, { url: '/account/' }),
       invoke(handler, { url: '/missing' }),
     ]);
 
     assert.deepEqual(JSON.parse(String(health.body)), { status: 'ok', service: 'web-to-figma-site' });
     assert.equal(home.statusCode, 200);
     assert.match(String(home.body), /Web to Figma/);
-    assert.equal(connect.statusCode, 200);
-    assert.match(String(connect.body), /connect-config/);
+    assert.equal(connect.statusCode, 404);
+    assert.equal(account.statusCode, 404);
     assert.equal(missing.statusCode, 404);
   } finally {
     await rm(outputDirectory, { force: true, recursive: true });

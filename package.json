@@ -1,6 +1,11 @@
 {
   "name": "web-to-figma",
+  "version": "1.0.0",
   "private": true,
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
   "workspaces": [
     "api"
   ],
@@ -18,6 +23,8 @@
     "check:api": "npm run check --workspace @web-to-figma/api",
     "migrate:api": "npm run migrate --workspace @web-to-figma/api",
     "build:site": "node marketing-site/build.mjs --site-url \"$SITE_URL\"",
-    "package:extension": "node scripts/package-extension.mjs"
+    "package:extension": "node scripts/package-extension.mjs",
+    "package:figma": "node scripts/package-figma-plugin.mjs",
+    "package:all": "npm run package:extension && npm run package:figma"
   }
 }

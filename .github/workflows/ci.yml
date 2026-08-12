@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Package local apps
+        run: npm run package:all
+
+      - name: Upload installable packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-to-figma-local
+          path: |
+            dist/chrome-extension
+            dist/figma-plugin
+          if-no-files-found: error

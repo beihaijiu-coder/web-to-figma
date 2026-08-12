@@ -40,6 +40,9 @@ const WEB_TO_FIGMA_CLIENT_TYPE = "chrome_extension";
 const CLOUD_TASK_PREVIEW_MAX_WIDTH = 560;
 const CLOUD_TASK_PREVIEW_MAX_HEIGHT = 320;
 const CLOUD_TASK_PREVIEW_MAX_DATA_URL_LENGTH = 450_000;
+// The public product currently ships as a local clipboard workflow. Keep the
+// cloud implementation dormant so it can be revisited without affecting capture.
+const CLOUD_HANDOFF_ENABLED = false;
 
 const figmaProxyQueue = [];
 const figmaProxyInFlight = new Map();
@@ -1164,7 +1167,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       await loadProxySession();
       const proxyDiagStart = figmaProxyDiagnostics.length;
       const tab = await resolveCaptureTab(msg, sender);
-      const previewImageDataUrl = await captureCloudTaskPreview(tab);
+      const previewImageDataUrl = CLOUD_HANDOFF_ENABLED
+        ? await captureCloudTaskPreview(tab)
+        : null;
 
       const { result, diagnostics } = await runCapture(tab.id, msg.options || {});
       const payload = await hydrateSceneAssets(normalizeCapturePayload(result), tab);
@@ -1176,14 +1181,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       let handoff = null;
       let handoffError = null;
       let canUploadToCloud = false;
-      try {
-        canUploadToCloud = Boolean(await getCloudAccessToken(await getCloudApiBaseUrl()));
-      } catch (error) {
-        handoffError = {
-          message: error?.message || String(error),
-          code: error?.code || "CLOUD_STATUS_FAILED",
-          status: error?.status || 0,
-        };
+      if (CLOUD_HANDOFF_ENABLED) {
+        try {
+          canUploadToCloud = Boolean(await getCloudAccessToken(await getCloudApiBaseUrl()));
+        } catch (error) {
+          handoffError = {
+            message: error?.message || String(error),
+            code: error?.code || "CLOUD_STATUS_FAILED",
+            status: error?.status || 0,
+          };
+        }
       }
       if (canUploadToCloud) {
         try {

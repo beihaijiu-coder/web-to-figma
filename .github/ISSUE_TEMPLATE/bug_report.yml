@@ -1,0 +1,69 @@
+name: 错误报告
+description: 报告可以稳定复现的捕获、导入或界面问题
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请不要上传包含账号、客户数据或其他私人信息的捕获文件。
+  - type: dropdown
+    id: area
+    attributes:
+      label: 问题位置
+      options:
+        - Chrome 完整页面捕获
+        - Chrome 单个元素捕获
+        - Figma 导入
+        - 项目官网
+        - 安装或打包
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: 实际结果
+      description: 请说明发生了什么。
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 打开……
+        2. 选择……
+        3. 查看……
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果
+    validations:
+      required: true
+  - type: input
+    id: example_url
+    attributes:
+      label: 公开示例网址
+      description: 如果问题与某个网页有关，请提供可以公开访问的网址。
+  - type: textarea
+    id: environment
+    attributes:
+      label: 使用环境
+      placeholder: |
+        操作系统：
+        Chrome 版本：
+        Figma 版本：
+    validations:
+      required: true
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 截图或补充信息
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 隐私确认
+      options:
+        - label: 我已确认提交内容不包含私人信息。
+          required: true

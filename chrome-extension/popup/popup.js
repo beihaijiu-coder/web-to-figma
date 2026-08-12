@@ -5,6 +5,7 @@ const TARGET_INSTALLATION_KEY = "webToFigmaTargetInstallationId";
 const ALLOWED_CONCURRENCY = new Set(["4", "6", "8", "10", "12", "16", "20", "infinite"]);
 const DEFAULT_API_BASE_URL = "https://web-to-figmaapi-production.up.railway.app";
 const LEGACY_LOCAL_API_ORIGINS = new Set(["http://localhost:8787", "http://127.0.0.1:8787"]);
+const CLOUD_SYNC_ENABLED = false;
 
 const toggle = document.getElementById("assetProxyToggle");
 const concurrency = document.getElementById("proxyConcurrency");
@@ -29,7 +30,7 @@ function setCloudStatus(text) {
 
 function setBusy(busy) {
   captureBtn.disabled = busy;
-  captureBtn.textContent = busy ? "转换中..." : pendingCopyPayload ? "复制结果" : "捕获当前网页";
+  captureBtn.textContent = busy ? "正在捕获…" : pendingCopyPayload ? "再次复制捕获数据" : "捕获当前页面";
 }
 
 function setCloudBusy(busy) {
@@ -77,7 +78,7 @@ function normalizeConcurrency(value) {
 
 function renderFigmaTargets(installations, selectedId = figmaTarget.value) {
   const targets = Array.isArray(installations) ? installations : [];
-  figmaTarget.replaceChildren(new Option("账号任务队列（推荐）", ""));
+  figmaTarget.replaceChildren(new Option("我的 Figma 任务列表", ""));
   for (const [index, installation] of targets.entries()) {
     const label = installation.displayName || `定向到 Figma 插件 ${index + 1}`;
     figmaTarget.append(new Option(label, installation.id));
@@ -101,7 +102,7 @@ async function refreshCloudStatus() {
     if (res.connected) {
       const stored = await chrome.storage.local.get({ [TARGET_INSTALLATION_KEY]: "" });
       renderFigmaTargets(res.figmaInstallations, stored[TARGET_INSTALLATION_KEY]);
-      setCloudStatus("已连接。采集结果会加密上传到账号任务队列，Figma 插件登录后可领取。");
+      setCloudStatus("云端同步已连接。捕获后会直接出现在 Figma 插件的最近任务中。");
       return;
     }
 
@@ -115,7 +116,7 @@ async function refreshCloudStatus() {
       return;
     }
 
-    setCloudStatus("未连接。先连接账号，再使用云端任务中转。");
+    setCloudStatus("未连接。你仍然可以使用本地剪贴板完成导入。");
     renderFigmaTargets([]);
   } catch (error) {
     setCloudStatus(`连接状态读取失败：${error.message || error}`);
@@ -138,11 +139,11 @@ chrome.storage.local.get(
       chrome.storage.local.set({ webToFigmaApiBaseUrl: effectiveApiBaseUrl });
     }
     figmaTarget.value = res[TARGET_INSTALLATION_KEY] || "";
-    refreshCloudStatus();
+    if (CLOUD_SYNC_ENABLED) refreshCloudStatus();
   }
 );
 
-setInterval(() => void refreshCloudStatus(), 5_000);
+if (CLOUD_SYNC_ENABLED) setInterval(() => void refreshCloudStatus(), 5_000);
 
 figmaTarget.addEventListener("change", () => {
   chrome.storage.local.set({ [TARGET_INSTALLATION_KEY]: figmaTarget.value });
@@ -150,7 +151,7 @@ figmaTarget.addEventListener("change", () => {
 
 toggle.addEventListener("change", () => {
   chrome.storage.local.set({ [STORAGE_KEY]: toggle.checked }, () => {
-    setStatus(toggle.checked ? "已开启跨域图片代理模式" : "已关闭跨域图片代理模式");
+    setStatus(toggle.checked ? "跨域图片代理已开启。" : "跨域图片代理已关闭。");
   });
 });
 
@@ -178,7 +179,7 @@ connectAccountBtn.addEventListener("click", async () => {
     if (!res || !res.ok) throw new Error((res && res.error) || "连接请求失败");
 
     apiBaseUrl.value = res.apiBaseUrl || apiBaseUrl.value;
-    setCloudStatus(`已打开连接网页。验证码：${res.userCode}`);
+    setCloudStatus(`已打开安全连接页面，确认码：${res.userCode}`);
   } catch (error) {
     setCloudStatus(`连接失败：${error.message || error}`);
   } finally {
@@ -191,7 +192,7 @@ disconnectAccountBtn.addEventListener("click", async () => {
   try {
     const res = await sendRuntimeMessage({ type: "WEB_TO_FIGMA_CLOUD_DISCONNECT" });
     if (!res || !res.ok) throw new Error((res && res.error) || "断开失败");
-    setCloudStatus("已断开本机扩展连接。");
+    setCloudStatus("已断开这台 Chrome 的云端同步。");
     renderFigmaTargets([]);
   } catch (error) {
     setCloudStatus(`断开失败：${error.message || error}`);
@@ -207,7 +208,7 @@ captureBtn.addEventListener("click", () => {
       .then(() => {
         pendingCopyPayload = null;
         setBusy(false);
-        setStatus("已复制转换结果，请回到 Figma 插件导入。");
+        setStatus("捕获数据已复制，请回到 Figma 插件导入。");
       })
       .catch((error) => {
         setBusy(false);
@@ -240,7 +241,7 @@ captureBtn.addEventListener("click", () => {
 
     if (res.handoff) {
       pendingCopyPayload = null;
-      setStatus("已加密上传到账号任务队列。请回到 Figma 插件领取并导入。");
+      setStatus("已安全发送到 Figma 插件的最近任务。");
       setTimeout(() => window.close(), 1100);
       return;
     }
@@ -256,7 +257,7 @@ captureBtn.addEventListener("click", () => {
         setStatus(
           res.handoffError
             ? `云端发送失败，已改用剪贴板：${res.handoffError.message}`
-            : "已复制转换结果，请回到 Figma 插件点击“导入剪贴板”。"
+            : "捕获数据已复制，请回到 Figma 插件点击“导入最近捕获”。"
         );
         setTimeout(() => window.close(), 900);
       })

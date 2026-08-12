@@ -4,49 +4,63 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Web to Figma</title>
-  <link rel="stylesheet" href="popup.css" />
+  <link rel="stylesheet" href="popup.css?v=3" />
 </head>
 <body>
   <main class="panel">
-    <h1>Web to Figma</h1>
-    <label class="row" for="assetProxyToggle">
-      <span>跨域图片代理模式</span>
-      <input id="assetProxyToggle" type="checkbox" />
-    </label>
-    <label class="row" for="proxyConcurrency">
-      <span>图片采集并发</span>
-      <select id="proxyConcurrency">
-        <option value="4">4</option>
-        <option value="6">6</option>
-        <option value="8">8</option>
-        <option value="10">10</option>
-        <option value="12">12</option>
-        <option value="16">16</option>
-        <option value="20">20</option>
-        <option value="infinite">无限</option>
-      </select>
-    </label>
-    <p class="hint">默认关闭代理。并发仅影响开启代理后的图片抓取速度与稳定性。</p>
-    <section class="account">
-      <h2>账号连接</h2>
-      <label class="stack" for="apiBaseUrl">
-        <span>API 地址</span>
-        <input id="apiBaseUrl" type="url" value="https://web-to-figmaapi-production.up.railway.app" />
-      </label>
-      <label class="stack" for="figmaTarget">
-        <span>发送方式</span>
-        <select id="figmaTarget">
-          <option value="">账号任务队列（推荐）</option>
-        </select>
-      </label>
-      <div class="button-row">
-        <button id="connectAccountBtn" class="secondary" type="button">连接账号</button>
-        <button id="disconnectAccountBtn" class="ghost" type="button">断开</button>
+    <header class="app-header">
+      <img src="../assets/icons/icon48.png" width="32" height="32" alt="" />
+      <div>
+        <h1>Web to Figma</h1>
+        <p>本地捕获设置</p>
       </div>
-      <p id="cloudStatus" class="status" aria-live="polite"></p>
+    </header>
+
+    <section class="capture-card" aria-labelledby="capture-title">
+      <div>
+        <h2 id="capture-title">继续捕获当前页面</h2>
+        <p>捕获结果会复制到本地剪贴板，不需要登录或配置 API。</p>
+      </div>
+      <button id="captureBtn" type="button">捕获当前页面</button>
+      <p id="status" class="status" aria-live="polite"></p>
     </section>
-    <button id="captureBtn" type="button">捕获当前网页</button>
-    <p id="status" class="status" aria-live="polite"></p>
+
+    <details class="settings-group">
+      <summary>图片与网络设置</summary>
+      <div class="settings-body">
+        <label class="row" for="assetProxyToggle">
+          <span>
+            <strong>跨域图片代理</strong>
+            <small>仅在图片缺失时开启</small>
+          </span>
+          <input id="assetProxyToggle" type="checkbox" />
+        </label>
+        <label class="row" for="proxyConcurrency">
+          <span>
+            <strong>图片采集并发</strong>
+            <small>代理开启后生效</small>
+          </span>
+          <select id="proxyConcurrency">
+            <option value="4">4</option>
+            <option value="6">6</option>
+            <option value="8">8</option>
+            <option value="10">10</option>
+            <option value="12">12</option>
+            <option value="16">16</option>
+            <option value="20">20</option>
+            <option value="infinite">无限</option>
+          </select>
+        </label>
+      </div>
+    </details>
+
+    <div data-disabled-feature="remote-handoff" hidden aria-hidden="true">
+      <p id="cloudStatus"></p>
+      <select id="figmaTarget"><option value="">本地捕获</option></select>
+      <button id="connectAccountBtn" type="button">连接</button>
+      <button id="disconnectAccountBtn" type="button">断开</button>
+      <input id="apiBaseUrl" type="url" value="https://web-to-figmaapi-production.up.railway.app" />
+    </div>
   </main>
   <script src="popup.js"></script>
 </body>

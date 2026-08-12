@@ -19,39 +19,32 @@ test('builds matching canonical, robots, and sitemap assets', async () => {
     await buildMarketingSite({
       siteUrl: 'https://webtofigma.example/',
       outputDirectory,
-      apiBaseUrl: 'https://api.webtofigma.example',
-      clerkPublishableKey: 'pk_test_example',
-      clerkFrontendApiUrl: 'https://clerk.webtofigma.example',
       allowIndexing: true,
     });
-    const [html, connectHtml, connectScript, accountHtml, accountScript, robots, sitemap] = await Promise.all([
+    const [html, robots, sitemap] = await Promise.all([
       readFile(path.join(outputDirectory, 'index.html'), 'utf8'),
-      readFile(path.join(outputDirectory, 'connect', 'device', 'index.html'), 'utf8'),
-      readFile(path.join(outputDirectory, 'connect-device.js'), 'utf8'),
-      readFile(path.join(outputDirectory, 'account', 'index.html'), 'utf8'),
-      readFile(path.join(outputDirectory, 'account.js'), 'utf8'),
       readFile(path.join(outputDirectory, 'robots.txt'), 'utf8'),
       readFile(path.join(outputDirectory, 'sitemap.xml'), 'utf8'),
     ]);
 
     assert.match(html, /<link rel="canonical" href="https:\/\/webtofigma\.example\/"/);
     assert.match(html, /<meta name="robots" content="index,follow"/);
-    assert.match(connectHtml, /<meta name="robots" content="noindex,nofollow"/);
-    assert.match(connectHtml, /"apiBaseUrl":"https:\/\/api\.webtofigma\.example"/);
-    assert.match(connectHtml, /"clerkPublishableKey":"pk_test_example"/);
-    assert.match(connectScript, /device-connections\/approve/);
-    assert.match(connectScript, /authenticateWithRedirect/);
-    assert.match(connectScript, /oauth_google/);
-    assert.match(connectScript, /device-connection-approved/);
-    assert.doesNotMatch(connectHtml, /确认连接/);
-    assert.match(accountHtml, /<meta name="robots" content="noindex,nofollow"/);
-    assert.match(accountHtml, /"apiBaseUrl":"https:\/\/api\.webtofigma\.example"/);
-    assert.match(accountScript, /\/v1\/me/);
     assert.match(robots, /Sitemap: https:\/\/webtofigma\.example\/sitemap\.xml/);
     assert.match(sitemap, /<loc>https:\/\/webtofigma\.example\/<\/loc>/);
     assert.doesNotMatch(sitemap, /connect\/device/);
     assert.doesNotMatch(sitemap, /account/);
     assert.doesNotMatch(sitemap, /lastmod/);
+    await assert.rejects(
+      readFile(path.join(outputDirectory, 'connect', 'device', 'index.html'), 'utf8'),
+      { code: 'ENOENT' },
+    );
+    await assert.rejects(readFile(path.join(outputDirectory, 'account', 'index.html'), 'utf8'), {
+      code: 'ENOENT',
+    });
+    await assert.rejects(readFile(path.join(outputDirectory, 'connect-device.js'), 'utf8'), {
+      code: 'ENOENT',
+    });
+    await assert.rejects(readFile(path.join(outputDirectory, 'account.js'), 'utf8'), { code: 'ENOENT' });
   } finally {
     await rm(outputDirectory, { force: true, recursive: true });
   }
@@ -64,8 +57,6 @@ test('blocks indexing on temporary deployment domains by default', async () => {
     await buildMarketingSite({
       siteUrl: 'https://temporary-site.up.railway.app/',
       outputDirectory,
-      apiBaseUrl: 'https://api.example.com',
-      clerkPublishableKey: 'pk_test_example',
     });
     const [html, robots] = await Promise.all([
       readFile(path.join(outputDirectory, 'index.html'), 'utf8'),

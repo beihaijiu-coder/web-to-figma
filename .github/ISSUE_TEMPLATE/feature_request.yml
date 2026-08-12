@@ -1,0 +1,32 @@
+name: 功能建议
+description: 说明希望改进的使用流程或转换结果
+title: "[Feature] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        当前版本使用本地剪贴板在 Chrome 与 Figma 之间传递数据，不启用云端同步。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 希望解决的问题
+      description: 请说明当前流程中哪个环节不够方便或结果不够准确。
+    validations:
+      required: true
+  - type: textarea
+    id: workflow
+    attributes:
+      label: 期望的使用流程
+      description: 请按实际使用顺序说明希望如何操作。
+    validations:
+      required: true
+  - type: textarea
+    id: examples
+    attributes:
+      label: 示例或参考
+      description: 可以附上公开网页、截图或类似工具的使用方式。
+  - type: textarea
+    id: impact
+    attributes:
+      label: 使用价值
+      description: 请说明这项修改会帮助完成什么任务。
