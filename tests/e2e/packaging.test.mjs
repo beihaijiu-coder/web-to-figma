@@ -145,6 +145,7 @@ test("release packaging stages both local apps", () => {
   assert.equal(releasePackager.includes("createHash(\"sha256\")"), true);
   assert.equal(releaseWorkflow.includes('tags:\n      - "v*.*.*"'), true);
   assert.equal(releaseWorkflow.includes("npm run verify:release"), true);
+  assert.equal(releaseWorkflow.includes("npm audit --audit-level=high"), true);
   assert.equal(releaseWorkflow.includes("npm test"), true);
   assert.equal(releaseWorkflow.includes("--notes-from-tag"), true);
 });
