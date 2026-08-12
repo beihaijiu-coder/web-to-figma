@@ -29,14 +29,12 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Package local apps
-        run: npm run package:all
+      - name: Package versioned release files
+        run: npm run package:release
 
       - name: Upload installable packages
         uses: actions/upload-artifact@v7
         with:
           name: web-to-figma-local
-          path: |
-            dist/chrome-extension
-            dist/figma-plugin
+          path: dist/release
           if-no-files-found: error

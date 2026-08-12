@@ -6,6 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/beihaijiu-coder/web-to-figma/actions/workflows/ci.yml"><img src="https://github.com/beihaijiu-coder/web-to-figma/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
+  <a href="https://github.com/beihaijiu-coder/web-to-figma/releases/latest"><img src="https://img.shields.io/github/v/release/beihaijiu-coder/web-to-figma" alt="Latest release" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-7257ff" alt="MIT License" /></a>
 </p>
 
@@ -28,29 +29,40 @@ The current version transfers capture data through the local clipboard. It does 
 
 ## Installation
 
-Web to Figma is currently installed locally from GitHub.
+Web to Figma is currently installed from a GitHub Release in developer mode.
 
-### 1. Download the project
+### 1. Download the release packages
 
-Select **Code → Download ZIP** on GitHub and extract the archive. You can also use Git:
+Open the [latest release](https://github.com/beihaijiu-coder/web-to-figma/releases/latest) and download these files:
 
-    git clone https://github.com/beihaijiu-coder/web-to-figma.git
-    cd web-to-figma
+- <code>web-to-figma-chrome-v1.0.0.zip</code>
+- <code>web-to-figma-figma-v1.0.0.zip</code>
+
+Extract both archives. <code>SHA256SUMS.txt</code> is available on the same page if you want to verify the downloads.
 
 ### 2. Install the Chrome extension
 
 1. Open <code>chrome://extensions</code> in desktop Chrome.
 2. Enable **Developer mode** in the upper-right corner.
 3. Select **Load unpacked**.
-4. Choose the <code>chrome-extension/</code> directory from this project.
+4. Choose the extracted Chrome directory that contains <code>manifest.json</code>.
 5. Pin Web to Figma to the Chrome toolbar for easier access.
 
 ### 3. Install the Figma plugin
 
 1. Open the Figma desktop app.
 2. Go to **Plugins → Development → Import plugin from manifest**.
-3. Select <code>figma-plugin/manifest.json</code>.
+3. Select <code>manifest.json</code> from the extracted Figma directory.
 4. Open Web to Figma from the development plugins list when you need it.
+
+### Install from source
+
+Clone the repository if you want to develop or inspect the source code:
+
+    git clone https://github.com/beihaijiu-coder/web-to-figma.git
+    cd web-to-figma
+
+Then load <code>chrome-extension/</code> in Chrome and import <code>figma-plugin/manifest.json</code> in Figma.
 
 ## Usage
 
@@ -131,11 +143,14 @@ Common commands:
     npm run package:extension
     npm run package:figma
     npm run package:all
+    npm run package:release
     npm run dev:site
 
 <code>npm run package:extension</code> creates a Chrome directory at <code>dist/chrome-extension/</code> that can be loaded as an unpacked extension.
 
-<code>npm run package:all</code> creates both <code>dist/chrome-extension/</code> and <code>dist/figma-plugin/</code>. GitHub CI produces the same two installable packages.
+<code>npm run package:all</code> creates both <code>dist/chrome-extension/</code> and <code>dist/figma-plugin/</code>. GitHub CI packages these directories as versioned downloads.
+
+<code>npm run package:release</code> creates versioned ZIP files and <code>SHA256SUMS.txt</code> under <code>dist/release/</code>.
 
 Provide an HTTPS root URL when building the production website:
 

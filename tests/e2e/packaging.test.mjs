@@ -120,6 +120,14 @@ test("release packaging stages both local apps", () => {
     new URL("../../scripts/package-figma-plugin.mjs", import.meta.url),
     "utf8"
   );
+  const releasePackager = fs.readFileSync(
+    new URL("../../scripts/package-release.mjs", import.meta.url),
+    "utf8"
+  );
+  const releaseWorkflow = fs.readFileSync(
+    new URL("../../.github/workflows/release.yml", import.meta.url),
+    "utf8"
+  );
 
   assert.equal(packageJson.version, "1.0.0");
   assert.equal(packageJson.scripts["package:figma"], "node scripts/package-figma-plugin.mjs");
@@ -127,8 +135,18 @@ test("release packaging stages both local apps", () => {
     packageJson.scripts["package:all"],
     "npm run package:extension && npm run package:figma"
   );
+  assert.equal(
+    packageJson.scripts["package:release"],
+    "npm run package:all && node scripts/package-release.mjs"
+  );
   assert.equal(chromePackager.includes('"connection-complete-bridge.js"'), true);
   assert.equal(figmaPackager.includes('path.join(rootDirectory, "figma-plugin")'), true);
+  assert.equal(releasePackager.includes("SHA256SUMS.txt"), true);
+  assert.equal(releasePackager.includes("createHash(\"sha256\")"), true);
+  assert.equal(releaseWorkflow.includes('tags:\n      - "v*.*.*"'), true);
+  assert.equal(releaseWorkflow.includes("npm run verify:release"), true);
+  assert.equal(releaseWorkflow.includes("npm test"), true);
+  assert.equal(releaseWorkflow.includes("--notes-from-tag"), true);
 });
 
 test("Figma plugin main script avoids syntax unsupported by Figma's plugin parser", () => {

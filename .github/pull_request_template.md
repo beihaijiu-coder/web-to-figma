@@ -5,7 +5,7 @@
 ## 验证
 
 - [ ] 已运行 `npm test`
-- [ ] 已运行 `npm run package:all`
+- [ ] 已运行 `npm run package:release`
 - [ ] 如果修改了界面，已附上修改前后的截图
 
 ## 边界检查

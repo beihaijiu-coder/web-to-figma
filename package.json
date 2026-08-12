@@ -25,6 +25,8 @@
     "build:site": "node marketing-site/build.mjs --site-url \"$SITE_URL\"",
     "package:extension": "node scripts/package-extension.mjs",
     "package:figma": "node scripts/package-figma-plugin.mjs",
-    "package:all": "npm run package:extension && npm run package:figma"
+    "package:all": "npm run package:extension && npm run package:figma",
+    "package:release": "npm run package:all && node scripts/package-release.mjs",
+    "verify:release": "node scripts/verify-release-version.mjs"
   }
 }

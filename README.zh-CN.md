@@ -6,6 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/beihaijiu-coder/web-to-figma/actions/workflows/ci.yml"><img src="https://github.com/beihaijiu-coder/web-to-figma/actions/workflows/ci.yml/badge.svg" alt="CI 状态" /></a>
+  <a href="https://github.com/beihaijiu-coder/web-to-figma/releases/latest"><img src="https://img.shields.io/github/v/release/beihaijiu-coder/web-to-figma" alt="最新版本" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-7257ff" alt="MIT License" /></a>
 </p>
 
@@ -28,29 +29,40 @@
 
 ## 安装
 
-项目目前通过 GitHub 本地安装。
+项目目前通过 GitHub Release 以开发者模式安装。
 
-### 1. 下载项目
+### 1. 下载发布包
 
-在 GitHub 页面选择 **Code → Download ZIP**，然后将压缩包解压。也可以使用 Git：
+打开 [最新版本](https://github.com/beihaijiu-coder/web-to-figma/releases/latest)，下载以下两个文件：
 
-    git clone https://github.com/beihaijiu-coder/web-to-figma.git
-    cd web-to-figma
+- <code>web-to-figma-chrome-v1.0.0.zip</code>
+- <code>web-to-figma-figma-v1.0.0.zip</code>
+
+将两个压缩包解压。如果需要校验下载文件，同一页面也提供 <code>SHA256SUMS.txt</code>。
 
 ### 2. 安装 Chrome 扩展
 
 1. 在桌面版 Chrome 打开 <code>chrome://extensions</code>。
 2. 开启右上角的“开发者模式”。
 3. 选择“加载已解压的扩展程序”。
-4. 选择项目中的 <code>chrome-extension/</code> 目录。
+4. 选择解压后包含 <code>manifest.json</code> 的 Chrome 目录。
 5. 建议将 Web to Figma 固定在 Chrome 工具栏中。
 
 ### 3. 安装 Figma 插件
 
 1. 打开 Figma 桌面端。
 2. 进入 **Plugins → Development → Import plugin from manifest**。
-3. 选择 <code>figma-plugin/manifest.json</code>。
+3. 选择解压后 Figma 目录中的 <code>manifest.json</code>。
 4. 以后可以从开发插件列表打开 Web to Figma。
+
+### 从源码安装
+
+如果需要开发或检查源码，可以克隆仓库：
+
+    git clone https://github.com/beihaijiu-coder/web-to-figma.git
+    cd web-to-figma
+
+然后在 Chrome 中加载 <code>chrome-extension/</code>，并在 Figma 中导入 <code>figma-plugin/manifest.json</code>。
 
 ## 使用方法
 
@@ -131,11 +143,14 @@
     npm run package:extension
     npm run package:figma
     npm run package:all
+    npm run package:release
     npm run dev:site
 
 <code>npm run package:extension</code> 会在 <code>dist/chrome-extension/</code> 生成一份可以直接加载到 Chrome 的扩展目录。
 
-<code>npm run package:all</code> 会同时生成 <code>dist/chrome-extension/</code> 和 <code>dist/figma-plugin/</code>。GitHub 的 CI 也会生成同样的双端安装包。
+<code>npm run package:all</code> 会同时生成 <code>dist/chrome-extension/</code> 和 <code>dist/figma-plugin/</code>。GitHub 的 CI 会将这两个目录打包为带版本号的下载文件。
+
+<code>npm run package:release</code> 会在 <code>dist/release/</code> 中生成带版本号的 ZIP 文件和 <code>SHA256SUMS.txt</code>。
 
 生成官网正式文件时需要提供 HTTPS 根地址：
 
