@@ -40,6 +40,6 @@
 1. 同步修改 <code>package.json</code> 和 Chrome <code>manifest.json</code> 中的版本号。
 2. 更新 <code>CHANGELOG.md</code>，并在 <code>docs/releases/</code> 中编写对应版本的中英文说明。
 3. 运行 <code>npm test</code> 和 <code>npm run package:release</code>，确认两个 ZIP 文件及 <code>SHA256SUMS.txt</code> 正常生成。
-4. 使用版本说明创建带注释的 <code>vMAJOR.MINOR.PATCH</code> 标签，然后推送标签。
+4. 使用 <code>git tag --cleanup=verbatim -a vMAJOR.MINOR.PATCH -F docs/releases/MAJOR.MINOR.PATCH.md</code> 创建带注释的版本标签，然后推送标签。
 
-标签推送后，GitHub Release 工作流会重新运行测试、生成发布包，并使用标签注释创建 Release。
+标签推送后，GitHub Release 工作流会重新运行测试、生成发布包，并使用 <code>docs/releases/</code> 中的对应文件创建 Release。

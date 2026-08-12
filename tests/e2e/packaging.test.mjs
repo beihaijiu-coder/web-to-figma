@@ -147,7 +147,9 @@ test("release packaging stages both local apps", () => {
   assert.equal(releaseWorkflow.includes("npm run verify:release"), true);
   assert.equal(releaseWorkflow.includes("npm audit --audit-level=high"), true);
   assert.equal(releaseWorkflow.includes("npm test"), true);
-  assert.equal(releaseWorkflow.includes("--notes-from-tag"), true);
+  assert.equal(releaseWorkflow.includes('release_notes="docs/releases/${GITHUB_REF_NAME#v}.md"'), true);
+  assert.equal(releaseWorkflow.includes('--notes-file "$RELEASE_NOTES"'), true);
+  assert.equal(releaseWorkflow.includes('--repo "$GITHUB_REPOSITORY"'), false);
 });
 
 test("Figma plugin main script avoids syntax unsupported by Figma's plugin parser", () => {
