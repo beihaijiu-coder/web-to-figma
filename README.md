@@ -1,120 +1,129 @@
-# Web to Figma
-
-将 Chrome 中已经渲染的完整网页或选中元素导入 Figma。常规文字、容器、图片和布局会尽可能转换为可继续编辑的 Figma 图层。
-
-当前版本只使用本地剪贴板传递捕获数据，不需要登录账号，也不需要配置 API。
-
-<p align="center">
-  <img src="docs/images/marketing-site.jpg" alt="Web to Figma 官网首页" width="100%" />
+<p align="right">
+  <strong>English</strong> · <a href="./README.zh-CN.md">简体中文</a>
 </p>
 
-## 功能
+# Web to Figma
 
-- 捕获当前完整页面，包含已经滚动加载的内容。
-- 在页面上选择单个元素或组件后再捕获。
-- 将文字、容器、边框和图片转换为 Figma 原生节点。
-- 提供视觉还原优先和可编辑布局优先两种导入偏好。
-- 复杂局部可以单独保留视觉结果，不会将整页转换为一张图片。
-- 支持长页面分段、失败重试和取消导入后的图层清理。
+<p align="center">
+  <a href="https://github.com/beihaijiu-coder/web-to-figma/actions/workflows/ci.yml"><img src="https://github.com/beihaijiu-coder/web-to-figma/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-7257ff" alt="MIT License" /></a>
+</p>
 
-## 安装
+Capture a fully rendered page or a selected element in Chrome and import it into Figma. Standard text, containers, images, borders, and layouts are converted into editable Figma layers whenever possible.
 
-项目目前通过 GitHub 本地安装。
+The current version transfers capture data through the local clipboard. It does not require an account or API configuration.
 
-### 1. 下载项目
+<p align="center">
+  <img src="docs/images/marketing-site.jpg" alt="Web to Figma website" width="100%" />
+</p>
 
-在 GitHub 页面选择 **Code → Download ZIP**，然后将压缩包解压。也可以使用 Git：
+## Features
+
+- Capture the current full page, including content loaded while scrolling.
+- Select and capture a single element or component on the page.
+- Convert text, containers, borders, and images into native Figma nodes.
+- Choose between visual fidelity and editable layout import modes.
+- Preserve complex regions as local visual fallbacks without flattening the whole page.
+- Handle long-page segments, failed import retries, and partial-layer cleanup after cancellation.
+
+## Installation
+
+Web to Figma is currently installed locally from GitHub.
+
+### 1. Download the project
+
+Select **Code → Download ZIP** on GitHub and extract the archive. You can also use Git:
 
     git clone https://github.com/beihaijiu-coder/web-to-figma.git
     cd web-to-figma
 
-### 2. 安装 Chrome 扩展
+### 2. Install the Chrome extension
 
-1. 在桌面版 Chrome 打开 <code>chrome://extensions</code>。
-2. 开启右上角的“开发者模式”。
-3. 选择“加载已解压的扩展程序”。
-4. 选择项目中的 <code>chrome-extension/</code> 目录。
-5. 建议将 Web to Figma 固定在 Chrome 工具栏中。
+1. Open <code>chrome://extensions</code> in desktop Chrome.
+2. Enable **Developer mode** in the upper-right corner.
+3. Select **Load unpacked**.
+4. Choose the <code>chrome-extension/</code> directory from this project.
+5. Pin Web to Figma to the Chrome toolbar for easier access.
 
-### 3. 安装 Figma 插件
+### 3. Install the Figma plugin
 
-1. 打开 Figma 桌面端。
-2. 进入 **Plugins → Development → Import plugin from manifest**。
-3. 选择 <code>figma-plugin/manifest.json</code>。
-4. 以后可以从开发插件列表打开 Web to Figma。
+1. Open the Figma desktop app.
+2. Go to **Plugins → Development → Import plugin from manifest**.
+3. Select <code>figma-plugin/manifest.json</code>.
+4. Open Web to Figma from the development plugins list when you need it.
 
-## 使用方法
+## Usage
 
-### 捕获完整页面
+### Capture a full page
 
-1. 在 Chrome 打开需要导入的网页。
-2. 点击工具栏中的 Web to Figma 图标。
-3. 在页面顶部选择“捕获页面”。
-4. 等待界面显示“已准备好导入”。
-5. 回到 Figma，打开 Web to Figma 插件。
-6. 点击“导入最近捕获”。
-
-<p align="center">
-  <img src="docs/images/chrome-capture-toolbar.jpg" alt="Chrome 页面捕获完成后的界面" width="100%" />
-</p>
-
-### 捕获单个元素
-
-1. 在页面顶部的捕获工具中选择“选择元素”。
-2. 移动鼠标查看选择范围，然后点击目标元素。
-3. 回到 Figma 并选择“导入最近捕获”。
-
-选择元素时可以按 <code>Esc</code> 取消。对于嵌套结构，也可以使用方向键调整选择层级。
-
-### Figma 导入界面
-
-插件默认只展示本地导入流程。布局、溢出内容和替代字体都放在“导入设置”中，不确定时可以保留默认选项。
+1. Open the page you want to import in Chrome.
+2. Select the Web to Figma icon in the Chrome toolbar.
+3. Select **捕获页面 (Capture page)** from the toolbar at the top of the page.
+4. Wait for **已准备好导入 (Ready to import)** to appear.
+5. Return to Figma and open the Web to Figma plugin.
+6. Select **导入最近捕获 (Import latest capture)**.
 
 <p align="center">
-  <img src="docs/images/figma-plugin-import.jpg" alt="Figma 插件本地导入界面" width="420" />
+  <img src="docs/images/chrome-capture-toolbar.jpg" alt="Completed Chrome page capture" width="100%" />
 </p>
 
-如果 Figma 当前无法直接读取剪贴板，插件会显示手动粘贴输入框。此时在输入框中粘贴捕获数据即可继续导入。
+### Capture one element
 
-## 转换结果
+1. Select **选择元素 (Select element)** from the capture toolbar at the top of the page.
+2. Move the pointer to preview the selection boundary, then select the target element.
+3. Return to Figma and select **导入最近捕获 (Import latest capture)**.
 
-| 网页内容 | Figma 中的结果 |
+Press <code>Esc</code> to cancel element selection. You can also use the arrow keys to adjust the selected level in a nested structure.
+
+### Figma import panel
+
+The plugin shows the local import flow by default. Layout mode, overflow handling, and fallback fonts are available under **导入设置 (Import settings)**. Keep the defaults if you are unsure which options to choose.
+
+<p align="center">
+  <img src="docs/images/figma-plugin-import.jpg" alt="Local import panel in the Figma plugin" width="420" />
+</p>
+
+If Figma cannot read the clipboard directly, the plugin displays a manual paste field. Paste the capture data into that field to continue the import.
+
+## Conversion results
+
+| Web content | Result in Figma |
 | --- | --- |
-| 文字、标题、按钮文案 | 可编辑文本图层 |
-| 容器、卡片、页面区域 | Frame 或其他可选择的结构 |
-| 普通图片和背景图片 | 可替换的图片填充 |
-| SVG | 能够解析时转换为矢量内容 |
-| Canvas、视频、跨域 iframe | 按局部保留视觉结果 |
-| 无法使用的网页字体 | 使用设置中的替代字体继续导入 |
+| Body text, headings, and button labels | Editable text layers |
+| Containers, cards, and page regions | Frames or other selectable structures |
+| Standard images and background images | Replaceable image fills |
+| SVG | Vector content when the source can be parsed |
+| Canvas, video, and cross-origin iframe content | Local visual fallback for the affected region |
+| Unavailable web fonts | Import continues with the selected fallback font |
 
-一次捕获只对应当前 Chrome 视口下的一个真实渲染状态。项目不会根据一个桌面页面自动推断其他响应式断点。
+Each capture represents one rendered state at the current Chrome viewport. The project does not infer other responsive breakpoints from a single desktop page.
 
-## 本地数据说明
+## Local data flow
 
-当前使用流程如下：
+The current workflow is:
 
-    Chrome 页面 → 本地剪贴板 → Figma 插件
+    Chrome page → Local clipboard → Figma plugin
 
-捕获操作不会因为电脑中残留的旧账号状态而自动上传。仓库中的 <code>api/</code> 保存了早期任务中转实验代码，但当前产品界面和使用流程都没有启用这部分功能。
+A capture is not uploaded automatically because of account information left on the computer. The <code>api/</code> directory contains earlier task-transfer experiments, but the current product interface and workflow do not enable them.
 
-## 项目结构
+## Project structure
 
-    chrome-extension/   Chrome 页面采集与捕获工具
-    figma-plugin/       Figma 图层导入
-    marketing-site/     项目官网
-    docs/images/        README 与官网使用的真实界面截图
-    docs/demo/          截图和界面检查使用的示例网页
-    tests/              Chrome、Figma、官网与端到端测试
-    api/                当前未启用的任务中转实验代码
+    chrome-extension/   Chrome page capture tools
+    figma-plugin/       Figma layer importer
+    marketing-site/     Project website
+    docs/images/        Interface screenshots used by the README and website
+    docs/demo/          Example page used for screenshots and interface checks
+    tests/              Chrome, Figma, website, and end-to-end tests
+    api/                Dormant task-transfer experiments
 
-## 本地开发
+## Local development
 
-需要 Node.js 22 或更高版本。
+Node.js 22 or later is required.
 
     npm install
     npm test
 
-常用命令：
+Common commands:
 
     npm run test:extension
     npm run test:figma
@@ -124,26 +133,26 @@
     npm run package:all
     npm run dev:site
 
-<code>npm run package:extension</code> 会在 <code>dist/chrome-extension/</code> 生成一份可以直接加载到 Chrome 的扩展目录。
+<code>npm run package:extension</code> creates a Chrome directory at <code>dist/chrome-extension/</code> that can be loaded as an unpacked extension.
 
-<code>npm run package:all</code> 会同时生成 <code>dist/chrome-extension/</code> 和 <code>dist/figma-plugin/</code>。GitHub 的 CI 也会生成同样的双端安装包。
+<code>npm run package:all</code> creates both <code>dist/chrome-extension/</code> and <code>dist/figma-plugin/</code>. GitHub CI produces the same two installable packages.
 
-生成官网正式文件时需要提供 HTTPS 根地址：
+Provide an HTTPS root URL when building the production website:
 
     SITE_URL=https://example.com npm run build:site
 
-## 已知限制
+## Known limitations
 
-- Chrome 内部页面、扩展页面和浏览器设置页无法捕获。
-- 动画、视频播放状态和交互逻辑不会转换为 Figma 原型行为。
-- 无限滚动页面可能被拆分为多个内容段，需要分别导入。
-- 网页使用的字体如果没有安装在 Figma 环境中，会使用替代字体。
-- 某些跨域图片可能需要在捕获设置中开启图片代理。
+- Chrome internal pages, extension pages, and browser settings pages cannot be captured.
+- Animation, video playback state, and interaction logic are not converted into Figma prototype behavior.
+- Infinite-scroll pages may be split into separate content segments that need to be imported individually.
+- Web fonts unavailable in the Figma environment are replaced with the configured fallback font.
+- Some cross-origin images may require the image proxy option in capture settings.
 
-## 许可证
+## License
 
-项目使用 [MIT License](LICENSE)。可以使用、修改和分发代码，但需要保留原始版权与许可证声明。
+This project is available under the [MIT License](LICENSE). You may use, modify, and distribute the code while retaining the original copyright and license notice.
 
-## 反馈
+## Feedback
 
-如果页面转换失败，或者某类网页元素的结果不正确，可以在 [GitHub Issues](https://github.com/beihaijiu-coder/web-to-figma/issues) 中提交示例网址、截图和复现步骤。请先确认示例页面可以公开访问，不要提交包含私人信息的捕获数据。参与代码修改前，请阅读 [贡献说明](CONTRIBUTING.md)。版本变化记录在 [CHANGELOG.md](CHANGELOG.md)。
+If a conversion fails or a type of web element imports incorrectly, open a [GitHub issue](https://github.com/beihaijiu-coder/web-to-figma/issues) with a public example URL, screenshots, and reproduction steps. Confirm that the example page can be shared publicly, and do not submit capture data containing private information. Project changes are listed in [CHANGELOG.md](CHANGELOG.md).
